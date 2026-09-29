@@ -1,19 +1,22 @@
 <?php
 declare(strict_types=1);
 
-use App\Controllers\HomeController;
+use App\Controllers\ParticipantQuizController;
 use App\Core\Config;
+use App\Core\ProgramProvider;
+use App\Core\QuizProvider;
 use App\Core\Request;
 use App\Core\Response;
 use App\Core\Router;
-use App\Core\SchoolProfileProvider;
-use App\Core\ProgramProvider;
 
 /** @return Router */
 return static function (Config $config): Router {
     $router = new Router();
-    $home = new HomeController($config, new SchoolProfileProvider(), new ProgramProvider());
-    $router->get('/', static fn (Request $request): Response => $home->index());
+    $participantQuiz = new ParticipantQuizController(
+        $config,
+        new QuizProvider(new ProgramProvider()),
+    );
+    $router->get('/', static fn (Request $request): Response => $participantQuiz->index());
     $router->get('/health', static fn (Request $request): Response => Response::json([
         'status' => 'ok',
         'app' => $config->string('APP_NAME'),
