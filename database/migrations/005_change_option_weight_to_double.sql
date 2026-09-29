@@ -1,0 +1,1 @@
+ALTER TABLE option_weights MODIFY COLUMN weight DOUBLE NOT NULL;
