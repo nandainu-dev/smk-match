@@ -4,7 +4,17 @@ SMK Match is a configurable, interactive Major Discovery Quiz platform for schoo
 
 ## Current status
 
-Specification and baseline only. No production application, database, or dependencies have been implemented yet.
+G1 local bootstrap is implemented. Database, quiz functionality, and production deployment are not implemented.
+
+## Local bootstrap
+
+Requirements: PHP 8.3 or later; no Composer, Node, or NPM dependencies are required. Copy `.env.example` to `.env` and adjust only local safe values. Start the development server from the project root:
+
+```powershell
+php -S 127.0.0.1:8080 -t public
+```
+
+Open `http://127.0.0.1:8080/` for the development bootstrap page and `http://127.0.0.1:8080/health` for the JSON health response. The intended future production document root is `<project>/public`; no hosting configuration has been performed.
 
 ## Authoritative documents
 

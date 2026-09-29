@@ -13,6 +13,11 @@
 /runtime/
 /logs/
 /cache/
+!/storage/
+!/storage/cache/
+!/storage/cache/.gitkeep
+!/storage/logs/
+!/storage/logs/.gitkeep
 
 # User-provided uploads
 /public/uploads/
