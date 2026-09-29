@@ -4,7 +4,7 @@ SMK Match is a configurable, interactive Major Discovery Quiz platform for schoo
 
 ## Current status
 
-G3 adds a development-only school profile and branding foundation. It is reusable and database-ready, but school profile persistence, uploads, quiz functionality, and production deployment are not implemented.
+G4 adds an N-program foundation with centralized DKV/MPLB/PM development fixtures only. Program persistence, quiz functionality, scoring, uploads, and production deployment are not implemented.
 
 ## Local bootstrap
 

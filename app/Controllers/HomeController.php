@@ -6,10 +6,11 @@ namespace App\Controllers;
 use App\Core\Config;
 use App\Core\Response;
 use App\Core\SchoolProfileProvider;
+use App\Core\ProgramProvider;
 
 final class HomeController
 {
-    public function __construct(private Config $config, private SchoolProfileProvider $schoolProfiles)
+    public function __construct(private Config $config, private SchoolProfileProvider $schoolProfiles, private ProgramProvider $programs)
     {
     }
 
@@ -23,6 +24,7 @@ final class HomeController
         $logoLabel = htmlspecialchars($school->logoLabel(), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $primaryColor = SchoolProfileProvider::color($school->branding['primary'] ?? '', '#2D176F');
         $accentColor = SchoolProfileProvider::color($school->branding['accent'] ?? '', '#FF4F87');
+        $programs = $this->programs->active();
         ob_start();
         require SMK_MATCH_ROOT . '/resources/views/pages/home.php';
 

@@ -11,6 +11,8 @@ ob_start();
         <p><?= $schoolTagline ?></p>
         <p><?= $logoLabel ?></p>
     </section>
+    <section aria-label="Programs foundation"><h2>Programs Foundation</h2><p>Active programs: <?= count($programs) ?></p><?php foreach ($programs as $program): ?><article><strong><?= htmlspecialchars($program->name, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?></strong> — <?= htmlspecialchars($program->personalityTitle, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?> (<?= htmlspecialchars($program->mascotLabel(), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>)</article><?php endforeach; ?></section>
+    <p>G4 Programs Foundation — Development Only</p>
     <p>G3 Branding Foundation — Development Only</p>
 </main>
 <?php

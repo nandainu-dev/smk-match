@@ -7,11 +7,12 @@ use App\Core\Request;
 use App\Core\Response;
 use App\Core\Router;
 use App\Core\SchoolProfileProvider;
+use App\Core\ProgramProvider;
 
 /** @return Router */
 return static function (Config $config): Router {
     $router = new Router();
-    $home = new HomeController($config, new SchoolProfileProvider());
+    $home = new HomeController($config, new SchoolProfileProvider(), new ProgramProvider());
     $router->get('/', static fn (Request $request): Response => $home->index());
     $router->get('/health', static fn (Request $request): Response => Response::json([
         'status' => 'ok',
