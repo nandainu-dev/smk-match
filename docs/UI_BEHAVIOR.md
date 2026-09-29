@@ -2,7 +2,7 @@
 
 ## Quiz
 
-The quiz is mobile-first at a 390×844 reference viewport. It collects identity and separate consent before the quiz, presents neutral answers with randomized order where enabled, uses an analyzing transition, then reveals result identity, detail, sharing, and mission completion. Retry and result visibility follow quiz configuration.
+The quiz is mobile-first at a 390×844 reference viewport. It collects identity and separate consent before the quiz, presents neutral answers with randomized order where enabled, retains the supplied Final Round reference, uses an analyzing transition, then reveals result identity, detail, sharing, and mission completion. Retry and result visibility follow quiz configuration.
 
 ## Live monitor
 

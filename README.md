@@ -8,7 +8,7 @@ Specification and baseline only. No production application, database, or depende
 
 ## Authoritative documents
 
-The baseline in `docs/` is authoritative: `PROJECT_MASTER_SPEC.md`, `ROADMAP.md`, `DESIGN_SYSTEM.md`, `UI_BEHAVIOR.md`, `DATABASE_DESIGN.md`, `SCORING_SPEC.md`, `SECURITY_BASELINE.md`, `DEPLOYMENT_SPEC.md`, and `DESIGN_REFERENCE_MANIFEST.md`.
+The baseline in `docs/` is authoritative: `PROJECT_MASTER_SPEC.md`, `ROADMAP.md`, `DESIGN_SYSTEM.md`, `UI_BEHAVIOR.md`, `DATABASE_DESIGN.md`, `SCORING_SPEC.md`, `SECURITY_BASELINE.md`, `DEPLOYMENT_SPEC.md`, `DESIGN_REFERENCE_MANIFEST.md`, `DESIGN_ASSET_MANIFEST.md`, and `ASSET_INVENTORY.md`. The local `.fig` source is intentionally ignored; versioned PNGs are visual acceptance references and the four mascot PNGs are runtime assets.
 
 ## Branch strategy and workflow
 

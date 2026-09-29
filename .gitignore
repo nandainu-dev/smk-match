@@ -34,3 +34,6 @@ desktop.ini
 *.tmp
 *.bak
 *.swp
+
+# Local editable design sources; visual PNG references are versioned separately.
+*.fig

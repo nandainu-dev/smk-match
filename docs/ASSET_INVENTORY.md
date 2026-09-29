@@ -1,0 +1,59 @@
+# Asset Inventory
+
+G0.2 audit basis: 53 PNG files, one local `.fig` source, and ten intentional `.gitkeep` placeholders. All PNGs opened successfully; no zero-byte PNGs, unexpected binary extensions, or duplicate PNG SHA-256 values were found. The repeated empty-placeholder hash is expected and is not a binary duplicate. Dimensions, color mode, and SHA-256 below were read from the actual files; byte sizes were also captured in the G0.2 audit report. RGB source renders have no detected alpha; other listed PNGs are RGBA/transparent-capable.
+
+| Path | Size | Mode | SHA-256 |
+|---|---:|---|---|
+| `design-reference/admin/analytics.png` | 1440×1024 | RGBA | `e3924d60c04398f290ed286ae5c1cb13f4600c371637c569c231fea8727c5158` |
+| `design-reference/admin/appearance.png` | 1440×1024 | RGBA | `b23d5f7ab894dbb23ea922fdebfb3eeebbdbe2ab1e5ef015f167a592aa2fd29d` |
+| `design-reference/admin/campaign.png` | 1440×1024 | RGBA | `e857baf05bbfc86de4629012e15da27bca3399620a8b181f7c26aebc5fad5257` |
+| `design-reference/admin/jurusan.png` | 1440×1024 | RGBA | `7cf97906c193f40abf9b293f95b8e6a2693035da69b8228133c0e44292026f2f` |
+| `design-reference/admin/live-monitor.png` | 1440×1024 | RGBA | `f0cc6c13d910500c6467861bf9c4da9d58f6b0011a832a20bac66f7b2ae4be40` |
+| `design-reference/admin/overview.png` | 1440×1024 | RGBA | `544a76b90b99291540557e41a57d66583a7145ba9c8cc3bb4b687321f44fdef3` |
+| `design-reference/admin/participants.png` | 1440×1024 | RGBA | `f67f8657412e92f9375de10154e4e5a01a5b4572302626c2413087c77260c40c` |
+| `design-reference/admin/qr-links.png` | 1440×1024 | RGBA | `ccf8d936baa4b2649c6b997ca8f2e08f9c935032a24972478999896685dd7268` |
+| `design-reference/admin/questions.png` | 1440×1024 | RGBA | `ec20120e49a704a9a70f7a1098e37bcfd36713e9cd3539611e75f6d4fdfd5e79` |
+| `design-reference/admin/quiz.png` | 1440×1024 | RGBA | `8eadc9ec0319f71e35bb6b8ccf30f8080342e871e93c32869eacdfb86bb0530b` |
+| `design-reference/admin/results.png` | 1440×1024 | RGBA | `c4a1c762cc029e451900876a01ea5fe250e26bca36b37d4fb68b118c90609e17` |
+| `design-reference/admin/school-profile.png` | 1440×1024 | RGBA | `d4d14569517b5edca83c6853bcbe9cd81af131e124029b1ce063b4d60e91478d` |
+| `design-reference/admin/settings.png` | 1440×1024 | RGBA | `42859f9dfec08af1a0d886319323cff2cf8c3ac3e816302e982a55f657cc263e` |
+| `design-reference/characters/source-renders/dkv-source-render.png` | 1122×1402 | RGB | `4fcd333692d18a12fdc3a9f525edad7d5e8abae332534d57c7ee5314b021743b` |
+| `design-reference/characters/source-renders/mascot-trio-source-render.png` | 1448×1086 | RGB | `5cf456665e1598b2c0985c1c387d1791c2a118486df4e7512e28d8fe9ab2d249` |
+| `design-reference/characters/source-renders/mplb-source-render.png` | 1122×1402 | RGB | `fa535cdbec458645baf273333d5d25161f3765a45ee3fab1463b33f0b42a3cd4` |
+| `design-reference/characters/source-renders/pm-source-render.png` | 1122×1402 | RGB | `9a923f89f97ca4312739d64a574afde2b39f98b73d7f37578c91bbaa47acfeeb` |
+| `design-reference/characters/turnaround/dkv/back.png` | 392×1402 | RGBA | `e3a8f9d52ec61b1aae0fbc08f6adacc101fce82d27c2dc772e5d454ff4593092` |
+| `design-reference/characters/turnaround/dkv/front.png` | 392×1402 | RGBA | `b87ddc10304f9b45e9c1233602c67dd0642611ded0e0cbcad921228d6949c34f` |
+| `design-reference/characters/turnaround/dkv/side.png` | 410×1402 | RGBA | `f91144a66e93004f2af5ae87239fb5b407a8cdb9a471aaf532c47653582e4437` |
+| `design-reference/characters/turnaround/mplb/back.png` | 392×1402 | RGBA | `37b5835430b25e454d3d87d3b934135c629722bfbff88ade01700a8a46240a9e` |
+| `design-reference/characters/turnaround/mplb/front.png` | 392×1402 | RGBA | `770d6d2afebd21c7be7ac5e6d8ec7ea6a164572232a05b6a5b5cf016c733f087` |
+| `design-reference/characters/turnaround/mplb/side.png` | 410×1402 | RGBA | `5e8b3a7fd1198dcc7609ce6d8b50aca0ed2a2907709ec8386ff649a6f2774fb0` |
+| `design-reference/characters/turnaround/pm/back.png` | 392×1402 | RGBA | `b8c40767c4b865bb403f1b61e543ecb8b7b5ea6274126ea9b712a1156176a1ae` |
+| `design-reference/characters/turnaround/pm/front.png` | 392×1402 | RGBA | `d88a5b8b932e304f800fe975bd00da6942b3b307c5f59da65aacbe8773075940` |
+| `design-reference/characters/turnaround/pm/side.png` | 410×1402 | RGBA | `8ba7b3916bd6d88b3e326384696dd1ce595ffa5a708c2842136dea952ff0c6da` |
+| `design-reference/legacy/quiz/identity-screen-v2-legacy.png` | 390×844 | RGBA | `73bbfef31a423d96a904fe4a68847a148b0485816023362476a1ee92b55bc5cc` |
+| `design-reference/monitor/01-live-overview.png` | 2880×1620 | RGBA | `28cb178d2e44470ecccf83767b4574fe4b26b1d5d491a37f3fea233abf76b8c9` |
+| `design-reference/monitor/02-dkv-showcase.png` | 2880×1620 | RGBA | `a13ae457bb7bdff466c8744ca4d099dc6a045cd7160eb2247cf58994a0241d4e` |
+| `design-reference/monitor/03-mplb-showcase.png` | 2880×1620 | RGBA | `5a83eff983ba7547f8c2059ab8ed426af106d251c07b22336f72dbc9b09a8023` |
+| `design-reference/monitor/04-pm-showcase.png` | 2880×1620 | RGBA | `190a2b867343cb6e953abc7e60f62a03ffa40e36d57df8e1320cddb3cb63104e` |
+| `design-reference/quiz/core/01-landing.png` | 585×1266 | RGBA | `593378933ff53b0f6ba2bbff8d3b744401de777d58afef499a9183366bf083d1` |
+| `design-reference/quiz/core/02-identity.png` | 585×1266 | RGBA | `6ba5f754c44defca08bc26704598249b6a43dab34d5dccc1e0405636ee349647` |
+| `design-reference/quiz/core/03-intro.png` | 585×1266 | RGBA | `8e3ddff79fbd34e50170b746800662a7b86f2e3ca0674d8031847a42e0abb537` |
+| `design-reference/quiz/core/04-question.png` | 585×1266 | RGBA | `678146eb5d072f50af3a6e2b563da6294b597dc56a2768e89f33deddae35fa97` |
+| `design-reference/quiz/core/05-final-round.png` | 585×1266 | RGBA | `6a3e253dc3cea94dbcf03e804f3bffd5d4c36d10c0c016f0c64ab1849982bc1b` |
+| `design-reference/quiz/core/06-analyzing.png` | 585×1266 | RGBA | `5f1c128c1fc2942e3e57666e41677b5b4d297fcf6e6bfec6516158b5e3b54a63` |
+| `design-reference/quiz/results/dkv/finish.png` | 585×1266 | RGBA | `e69d5023715ed7e968443041cef297bc8e90ba31d701278babe3900c24ca9a47` |
+| `design-reference/quiz/results/dkv/result-detail.png` | 585×1745 | RGBA | `8017da2cd5451ddfcb6a1bd2c4edc2323097d4ad49d05f988a9472e5e39f00e4` |
+| `design-reference/quiz/results/dkv/result-reveal.png` | 585×1266 | RGBA | `3a54dcd1f8720f389138b9e0679c4ca17ccc408eacc9407bac6caf6fa8828c53` |
+| `design-reference/quiz/results/dkv/share-result.png` | 585×1266 | RGBA | `ed79ff588c7fc6a1120d5e9c99036523e4f95d627b2c32d5c3c298caeb29aad9` |
+| `design-reference/quiz/results/mplb/finish.png` | 585×1266 | RGBA | `92a2fa214912764ba655a57a5c134688740a713a3e25d240f60cb1b16aefb098` |
+| `design-reference/quiz/results/mplb/result-detail.png` | 585×1883 | RGBA | `af0ff354f5dd71ce91834092d91114eac69f5c5938fc5c278dd3da5974d84735` |
+| `design-reference/quiz/results/mplb/result-reveal.png` | 585×1266 | RGBA | `036ae5c510f8abc41afc4fed79364b502887b07863a1bdbab8fb36ea5354a9e3` |
+| `design-reference/quiz/results/mplb/share-result.png` | 585×1266 | RGBA | `bc3ca1f910f1234c6f0d4e92c04e3d70a7cc0be88c2bac13f098c919eab161c0` |
+| `design-reference/quiz/results/pm/finish.png` | 585×1266 | RGBA | `df329edbce935f8f613437dbbe207273539dd76b49d9ffb19f1ba798aebbc0de` |
+| `design-reference/quiz/results/pm/result-detail.png` | 585×1874 | RGBA | `6e783ffb99f7192e2d195c7a0849b96ca6051331a7ab7796c3cc1c8ca88a0da1` |
+| `design-reference/quiz/results/pm/result-reveal.png` | 585×1266 | RGBA | `6a9cb14da86feda0aaace43e4f24a3b9fdc4bbbd29ce6026f336e7f52ddf4f71` |
+| `design-reference/quiz/results/pm/share-result.png` | 585×1266 | RGBA | `44b068addab7c08a7265eac2df9b60c417c1b0668e5192787d0dec8692c68ddf` |
+| `public/assets/mascots/dkv/dkv-hero.png` | 1800×1500 | RGBA | `f9a9139cfa81a3434bdee265b7b97d4489982cefdc3c7b999174d6fdc95bc680` |
+| `public/assets/mascots/mascot-all.png` | 1800×1500 | RGBA | `9cf58f11ae2e88e8f741dc3eabbeeb8a2e7f1e47cc46f117e2310df4f018cf6f` |
+| `public/assets/mascots/mplb/mplb-hero.png` | 1800×1500 | RGBA | `aff6ff3a67aed818fff8c662b70f10d186ebd799ce1dee6db58ee9cc7c0e704d` |
+| `public/assets/mascots/pm/pm-hero.png` | 1800×1500 | RGBA | `b6cbe34b7cb2709c1581e49f6ac917bbd1a2137d936a7015075755f46b9a7e6b` |
