@@ -14,7 +14,7 @@ final class Config
     {
         $values = self::readDotEnv($root . '/.env');
 
-        foreach (['APP_NAME', 'APP_ENV', 'APP_DEBUG', 'APP_URL', 'APP_TIMEZONE'] as $key) {
+        foreach (['APP_NAME', 'APP_ENV', 'APP_DEBUG', 'APP_URL', 'APP_TIMEZONE', 'DB_HOST', 'DB_PORT', 'DB_DATABASE', 'DB_USERNAME', 'DB_PASSWORD', 'DB_CHARSET'] as $key) {
             $value = getenv($key);
             if ($value !== false) {
                 $values[$key] = $value;
@@ -27,6 +27,12 @@ final class Config
         $values['APP_DEBUG'] ??= $environment === 'local' ? 'true' : 'false';
         $values['APP_URL'] ??= 'http://127.0.0.1:8080';
         $values['APP_TIMEZONE'] ??= 'Asia/Jakarta';
+        $values['DB_HOST'] ??= '127.0.0.1';
+        $values['DB_PORT'] ??= '3306';
+        $values['DB_DATABASE'] ??= 'smk_match';
+        $values['DB_USERNAME'] ??= 'smk_match';
+        $values['DB_PASSWORD'] ??= '';
+        $values['DB_CHARSET'] ??= 'utf8mb4';
 
         return new self($values);
     }

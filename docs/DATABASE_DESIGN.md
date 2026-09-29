@@ -1,6 +1,6 @@
 # Proposed Relational Model
 
-This is a proposed relational model only; no executable migrations exist in G0.
+G2 implements this model in immutable, ordered MySQL/MariaDB-compatible SQL migrations. Internal tables use unsigned numeric primary keys; public UUIDs identify schools, participants, and attempts where stable external identity is needed. Migration execution is explicit CLI-only and tracked in `migrations`; web requests never run migrations.
 
 `schools` owns branding and configuration; `admins` belongs to schools. `programs` belongs to schools and has `program_media` and `program_careers`. `quizzes` is the editable conceptual quiz; each publish creates immutable `quiz_versions`. `questions` and `question_options` belong to a version (or versioned snapshot); `option_weights` maps an option to any number of `programs` with a numeric weight.
 
