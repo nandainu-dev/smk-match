@@ -6,7 +6,12 @@ ob_start();
     <p>Project Bootstrap</p>
     <p>Environment: <?= $environment ?></p>
     <p>PHP compatibility: OK</p>
-    <p>G1 Bootstrap — Development Only</p>
+    <section aria-label="School branding foundation" style="border: 2px solid <?= $primaryColor ?>; padding: 1rem; background: <?= $accentColor ?>;">
+        <h2><?= $schoolName ?></h2>
+        <p><?= $schoolTagline ?></p>
+        <p><?= $logoLabel ?></p>
+    </section>
+    <p>G3 Branding Foundation — Development Only</p>
 </main>
 <?php
 $content = (string) ob_get_clean();

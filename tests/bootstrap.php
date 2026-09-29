@@ -35,7 +35,7 @@ expect(date_default_timezone_get() === 'Asia/Jakarta', 'Timezone did not resolve
 $routes = require SMK_MATCH_ROOT . '/routes/web.php';
 $router = $routes($config);
 $home = $router->dispatch(new Request('GET', '/'));
-expect($home->status === 200 && str_contains($home->body, 'G1 Bootstrap'), 'Home route failed.');
+expect($home->status === 200 && str_contains($home->body, 'Project Bootstrap'), 'Home route failed.');
 
 $health = $router->dispatch(new Request('GET', '/health'));
 $payload = json_decode($health->body, true, 512, JSON_THROW_ON_ERROR);

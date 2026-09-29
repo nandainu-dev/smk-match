@@ -4,7 +4,7 @@ SMK Match is a configurable, interactive Major Discovery Quiz platform for schoo
 
 ## Current status
 
-G2 provides configuration, PDO, and an explicit migration foundation. No database has been created or connected in this repository; quiz functionality and production deployment are not implemented.
+G3 adds a development-only school profile and branding foundation. It is reusable and database-ready, but school profile persistence, uploads, quiz functionality, and production deployment are not implemented.
 
 ## Local bootstrap
 
@@ -17,6 +17,8 @@ php -S 127.0.0.1:8080 -t public
 Open `http://127.0.0.1:8080/` for the development bootstrap page and `http://127.0.0.1:8080/health` for the JSON health response. The intended future production document root is `<project>/public`; no hosting configuration has been performed.
 
 Database settings are safe placeholders in `.env.example`. Copy them into a local `.env` only when using a new, SMK Match-only local database. Migrations never run during web requests; invoke them explicitly with `php database/migrate.php`. Exact production MySQL/MariaDB version remains pending, and no production database exists.
+
+The home page demonstrates a clearly labeled development profile with safe fallback behavior when no logo is configured. Branding colors are validated before rendering; the development profile is replaceable by a later database-backed provider.
 
 ## Authoritative documents
 

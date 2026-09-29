@@ -2,7 +2,7 @@
 
 G2 implements this model in immutable, ordered MySQL/MariaDB-compatible SQL migrations. Internal tables use unsigned numeric primary keys; public UUIDs identify schools, participants, and attempts where stable external identity is needed. Migration execution is explicit CLI-only and tracked in `migrations`; web requests never run migrations.
 
-`schools` owns branding and configuration; `admins` belongs to schools. `programs` belongs to schools and has `program_media` and `program_careers`. `quizzes` is the editable conceptual quiz; each publish creates immutable `quiz_versions`. `questions` and `question_options` belong to a version (or versioned snapshot); `option_weights` maps an option to any number of `programs` with a numeric weight.
+`schools` owns branding and configuration, including display/short names, tagline, location/contact references, logo/favicon references, and constrained branding properties; `admins` belongs to schools. `programs` belongs to schools and has `program_media` and `program_careers`. `quizzes` is the editable conceptual quiz; each publish creates immutable `quiz_versions`. `questions` and `question_options` belong to a version (or versioned snapshot); `option_weights` maps an option to any number of `programs` with a numeric weight.
 
 `campaigns` belong to schools. `smart_links` hold permanent aliases, destinations, source, activity state, QR metadata, and scan tracking. `participants` record identity, separate consent state/timestamp, campaign/source provenance, and timestamps. `attempts` use visitor UUID and unique attempt UUID, reference participant/campaign/quiz version, and record idempotent submission state. `responses` preserve selected options for an attempt.
 
