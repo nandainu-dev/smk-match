@@ -1,0 +1,36 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Dependencies
+/vendor/
+/node_modules/
+
+# Runtime state
+/storage/logs/
+/storage/cache/
+/runtime/
+/logs/
+/cache/
+
+# User-provided uploads
+/public/uploads/
+/uploads/
+
+# IDE and OS metadata
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary and build output
+/tmp/
+/temp/
+/build/
+/dist/
+*.tmp
+*.bak
+*.swp
