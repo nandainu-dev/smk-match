@@ -10,6 +10,8 @@ The mobile-first quiz targets 390×844 and flows Landing → Identity → Intro 
 
 The 1920×1080 live monitor has exactly four rotating main slides: Overall/Live Overview, DKV, MPLB, and PM. Each has a fixed right sidebar for QR and a compact live participant/result feed. V1 uses lightweight polling; WebSockets are not required.
 
+The V1 runtime targets PHP 8.3 shared hosting with MySQL/MariaDB, PDO, and browser fetch. It must not require WebSocket/Swoole or server-side shell execution.
+
 The desktop-first admin control center includes Overview, Quiz, Question Bank, Programs, Campaign, QR & Links, Participants, Results, Analytics, Live Monitor Settings, Appearance, School Profile, and Settings.
 
 ## Configuration requirements
