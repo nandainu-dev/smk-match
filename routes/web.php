@@ -7,6 +7,7 @@ use App\Controllers\PublicParticipantQuizController;
 use App\Controllers\PublicParticipantPlayController;
 use App\Controllers\PublicParticipantSubmitController;
 use App\Controllers\PublicMonitorController;
+use App\Controllers\PublicMonitorPageController;
 use App\Core\AttemptRepository;
 use App\Core\AttemptResponseRepository;
 use App\Controllers\ParticipantQuizController;
@@ -109,6 +110,14 @@ return static function (Config $config): Router {
             new MonitorReadRepository($database),
         ),
     );
+    $publicMonitorPage = new PublicMonitorPageController(
+        $config,
+        new SmartLinkService(
+            new SmartLinkRepository($database),
+            new CampaignRepository($database),
+            new CampaignBatchRepository($database),
+        ),
+    );
 
     $router->get('/', static fn (Request $request): Response => $participantQuiz->index());
     $router->get('/result', static fn (Request $request): Response => $participantResult->preview('error'));
@@ -140,6 +149,10 @@ return static function (Config $config): Router {
     $router->getPattern(
         '/api/public/monitor/{alias}',
         static fn (Request $request, array $parameters): Response => $publicMonitor->show($request, $parameters['alias']),
+    );
+    $router->getPattern(
+        '/monitor/{alias}',
+        static fn (Request $request, array $parameters): Response => $publicMonitorPage->show($parameters['alias']),
     );
     $router->postPattern(
         '/api/public/submit/{attemptUuid}',
