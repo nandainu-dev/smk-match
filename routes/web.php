@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 use App\Controllers\PublicCampaignEntryController;
 use App\Controllers\PublicParticipantStartController;
+use App\Controllers\PublicParticipantQuizController;
 use App\Core\AttemptRepository;
 use App\Controllers\ParticipantQuizController;
 use App\Controllers\ParticipantResultController;
@@ -11,6 +12,7 @@ use App\Core\CampaignRepository;
 use App\Core\Config;
 use App\Core\Database;
 use App\Core\ParticipantRepository;
+use App\Core\ParticipantQuizDeliveryService;
 use App\Core\ParticipantStartService;
 use App\Core\ProgramProvider;
 use App\Core\QuizProvider;
@@ -61,6 +63,17 @@ return static function (Config $config): Router {
         ),
         new VisitorIdentityCookie(new UuidV4Generator()),
     );
+    $publicParticipantQuiz = new PublicParticipantQuizController(
+        new ParticipantQuizDeliveryService(
+            new AttemptRepository($database),
+            new ParticipantRepository($database),
+            new CampaignRepository($database),
+            new CampaignBatchRepository($database),
+            new QuizVersionRepository($database),
+            new VisitorIdentityCookie(new UuidV4Generator()),
+        ),
+        new VisitorIdentityCookie(new UuidV4Generator()),
+    );
 
     $router->get('/', static fn (Request $request): Response => $participantQuiz->index());
     $router->get('/result', static fn (Request $request): Response => $participantResult->preview('error'));
@@ -80,6 +93,10 @@ return static function (Config $config): Router {
     $router->getPattern(
         '/api/public/start/{alias}',
         static fn (Request $request, array $parameters): Response => Response::json(['ok' => false, 'error' => 'method_not_allowed'], 405),
+    );
+    $router->getPattern(
+        '/api/public/quiz/{attemptUuid}',
+        static fn (Request $request, array $parameters): Response => $publicParticipantQuiz->quiz($request, $parameters['attemptUuid']),
     );
     $router->get('/health', static fn (Request $request): Response => Response::json([
         'status' => 'ok',
