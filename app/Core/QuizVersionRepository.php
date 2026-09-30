@@ -138,6 +138,46 @@ final class QuizVersionRepository
         }
     }
 
+    public function replaceDraftDefinition(
+        int $schoolId,
+        int $quizId,
+        int $versionId,
+        QuizDefinition $definition,
+    ): QuizVersion {
+        $this->assertPositiveId($schoolId, 'School identity');
+        $this->assertPositiveId($quizId, 'Quiz identity');
+        $this->assertPositiveId($versionId, 'Quiz version identity');
+        $definition->validate();
+
+        $connection = $this->connection();
+        $connection->beginTransaction();
+
+        try {
+            $programIds = $this->lockEditableDraftForSchool(
+                $connection,
+                $schoolId,
+                $quizId,
+                $versionId,
+            );
+            $this->assertNoPersistedUsageLocked($connection, $versionId);
+            $this->assertExactProgramMembership($definition->programs, $programIds);
+            $this->deleteQuestionStructure($connection, $versionId);
+            $this->updateDraftName($connection, $versionId, $definition->name);
+            $this->insertQuestions($connection, $versionId, $definition->questions, $programIds);
+
+            $version = $this->requireHydratedVersion($versionId);
+            $connection->commit();
+
+            return $version;
+        } catch (\Throwable $throwable) {
+            if ($connection->inTransaction()) {
+                $connection->rollBack();
+            }
+
+            throw $throwable;
+        }
+    }
+
     public function updateStatus(
         int $versionId,
         string $expectedCurrentStatus,
@@ -192,6 +232,113 @@ final class QuizVersionRepository
         }
 
         return $this->rowInt($row, 'school_id');
+    }
+
+    /** @return array<string, int> */
+    private function lockEditableDraftForSchool(
+        PDO $connection,
+        int $schoolId,
+        int $quizId,
+        int $versionId,
+    ): array {
+        $statement = $connection->prepare(
+            'SELECT qv.id, qv.status
+             FROM quiz_versions AS qv
+             INNER JOIN quizzes AS q ON q.id = qv.quiz_id
+             WHERE qv.id = :version_id
+               AND qv.quiz_id = :quiz_id
+               AND q.school_id = :school_id
+             FOR UPDATE'
+        );
+        $statement->execute([
+            'version_id' => $versionId,
+            'quiz_id' => $quizId,
+            'school_id' => $schoolId,
+        ]);
+        $row = $statement->fetch();
+
+        if ($row === false) {
+            throw new \InvalidArgumentException('Quiz version is not available in the authenticated school scope.');
+        }
+
+        if ($this->rowString($row, 'status') !== QuizVersion::STATUS_DRAFT) {
+            throw new RuntimeException('Only unused draft quiz versions can be edited.');
+        }
+
+        return $this->hydrateProgramIds($versionId);
+    }
+
+    private function assertNoPersistedUsageLocked(PDO $connection, int $versionId): void
+    {
+        $statement = $connection->prepare(
+            'SELECT id
+             FROM attempts
+             WHERE quiz_version_id = :quiz_version_id
+             LIMIT 1
+             FOR UPDATE'
+        );
+        $statement->execute(['quiz_version_id' => $versionId]);
+
+        if ($statement->fetch() !== false) {
+            throw new RuntimeException('Quiz versions with persisted usage are immutable.');
+        }
+    }
+
+    /** @param array<string, bool> $programs @param array<string, int> $programIds */
+    private function assertExactProgramMembership(array $programs, array $programIds): void
+    {
+        $providedCodes = array_keys($programs);
+        $snapshotCodes = array_keys($programIds);
+        sort($providedCodes, SORT_STRING);
+        sort($snapshotCodes, SORT_STRING);
+
+        if ($providedCodes !== $snapshotCodes) {
+            throw new RuntimeException('Draft definition programs must match the version snapshot membership.');
+        }
+    }
+
+    private function deleteQuestionStructure(PDO $connection, int $versionId): void
+    {
+        $weights = $connection->prepare(
+            'DELETE ow
+             FROM option_weights AS ow
+             INNER JOIN question_options AS qo ON qo.id = ow.question_option_id
+             INNER JOIN questions AS q ON q.id = qo.question_id
+             WHERE q.quiz_version_id = :quiz_version_id'
+        );
+        $weights->execute(['quiz_version_id' => $versionId]);
+
+        $options = $connection->prepare(
+            'DELETE qo
+             FROM question_options AS qo
+             INNER JOIN questions AS q ON q.id = qo.question_id
+             WHERE q.quiz_version_id = :quiz_version_id'
+        );
+        $options->execute(['quiz_version_id' => $versionId]);
+
+        $questions = $connection->prepare(
+            'DELETE FROM questions
+             WHERE quiz_version_id = :quiz_version_id'
+        );
+        $questions->execute(['quiz_version_id' => $versionId]);
+    }
+
+    private function updateDraftName(PDO $connection, int $versionId, string $name): void
+    {
+        $statement = $connection->prepare(
+            'UPDATE quiz_versions
+             SET name = :name
+             WHERE id = :id AND status = :status'
+        );
+        $statement->execute([
+            'id' => $versionId,
+            'name' => $name,
+            'status' => QuizVersion::STATUS_DRAFT,
+        ]);
+
+        if ($statement->rowCount() !== 1) {
+            throw new RuntimeException('Quiz version lifecycle state changed concurrently.');
+        }
     }
 
     private function nextVersionNumberLocked(PDO $connection, int $quizId): int
@@ -368,14 +515,15 @@ final class QuizVersionRepository
     private function insertQuestions(PDO $connection, int $versionId, array $questions, array $programIds): void
     {
         $questionStatement = $connection->prepare(
-            'INSERT INTO questions (quiz_version_id, prompt, sort_order, created_at, updated_at)
-             VALUES (:quiz_version_id, :prompt, :sort_order, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
+            'INSERT INTO questions (quiz_version_id, prompt, image_path, sort_order, created_at, updated_at)
+             VALUES (:quiz_version_id, :prompt, :image_path, :sort_order, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
         );
 
         foreach ($questions as $question) {
             $questionStatement->execute([
                 'quiz_version_id' => $versionId,
                 'prompt' => $question['text'],
+                'image_path' => $question['image_path'] ?? null,
                 'sort_order' => $question['order'],
             ]);
             $this->insertOptions($connection, (int) $connection->lastInsertId(), $question['options'], $programIds);
@@ -458,7 +606,7 @@ final class QuizVersionRepository
         $programIds = $this->hydrateProgramIds($versionId);
         $programs = array_fill_keys(array_keys($programIds), true);
         $questionsStatement = $this->connection()->prepare(
-            'SELECT id, prompt, sort_order
+            'SELECT id, prompt, image_path, sort_order
              FROM questions
              WHERE quiz_version_id = :quiz_version_id
              ORDER BY sort_order ASC, id ASC'
@@ -474,6 +622,7 @@ final class QuizVersionRepository
             $questions[] = [
                 'id' => 'question-' . $questionId,
                 'text' => $this->rowString($questionRow, 'prompt'),
+                'image_path' => $this->nullableRowString($questionRow, 'image_path'),
                 'order' => $this->rowInt($questionRow, 'sort_order'),
                 'options' => $options,
             ];
