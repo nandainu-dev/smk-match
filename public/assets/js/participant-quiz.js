@@ -31,12 +31,14 @@
         answers: {},
         currentIndex: 0,
         attemptUuid: null,
+        submissionInFlight: false,
         errorMessage: '',
         retry: null,
         canStartNewSession: false,
     };
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     let analysisTimer = null;
+    const request = window.fetch.bind(window);
 
     const isUuidV4 = (value) => typeof value === 'string'
         && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
@@ -105,6 +107,92 @@
             && typeof question.text === 'string' && Number.isInteger(question.order) && Array.isArray(question.options)
             && question.options.every((option) => option && typeof option.id === 'string'
                 && typeof option.text === 'string' && Number.isInteger(option.order)));
+    };
+
+    const hasCompleteAnswers = () => questions.length > 0
+        && questions.every((question) => typeof state.answers[question.id] === 'string'
+            && state.answers[question.id].trim() !== '');
+
+    const validSubmission = (response, payload, attemptUuid) => {
+        if ((response.status !== 201 && response.status !== 200) || !payload || payload.ok !== true
+            || payload.attempt_uuid !== attemptUuid || payload.status !== 'completed'
+            || typeof payload.already_completed !== 'boolean') {
+            return false;
+        }
+
+        return (response.status === 201 && payload.already_completed === false)
+            || (response.status === 200 && payload.already_completed === true);
+    };
+
+    const submissionError = (message, retry = null, canStartNewSession = false) => {
+        state.submissionInFlight = false;
+        showError(message, retry, canStartNewSession);
+    };
+
+    const submitRealAnswers = async () => {
+        if (!realMode || state.submissionInFlight) {
+            return;
+        }
+
+        const attemptUuid = state.attemptUuid;
+        if (!isUuidV4(attemptUuid)) {
+            submissionError('Sesi kuis tidak tersedia. Silakan mulai kembali dari link yang diberikan.', null, true);
+            return;
+        }
+
+        if (!hasCompleteAnswers()) {
+            const firstUnansweredIndex = questions.findIndex((question) => !state.answers[question.id]);
+            submissionError('Jawaban belum lengkap. Silakan lengkapi semua jawabanmu.', () => {
+                state.currentIndex = Math.max(firstUnansweredIndex, 0);
+                setState('QUESTION');
+            });
+            return;
+        }
+
+        const answers = questions.map((question) => ({
+            question_id: question.id,
+            option_id: state.answers[question.id],
+        }));
+        state.submissionInFlight = true;
+        setState('SUBMITTING');
+
+        try {
+            const response = await request(`/api/public/submit/${encodeURIComponent(attemptUuid)}`, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ answers }),
+            });
+            let payload = null;
+            try {
+                payload = await response.json();
+            } catch (error) {
+                // An invalid response must not move the participant to the handoff.
+            }
+
+            if (validSubmission(response, payload, attemptUuid)) {
+                state.submissionInFlight = false;
+                setState('ANALYZING');
+                return;
+            }
+
+            if (response.status === 404) {
+                submissionError('Sesi kuis tidak tersedia. Silakan mulai kembali dari link yang diberikan.', null, true);
+            } else if (response.status === 422) {
+                submissionError('Jawaban belum dapat diproses. Silakan periksa kembali jawabanmu.', () => {
+                    state.currentIndex = questions.length - 1;
+                    setState('QUESTION');
+                });
+            } else if (response.status === 400 || response.status === 415) {
+                submissionError('Permintaan belum dapat diproses. Silakan coba lagi nanti.');
+            } else {
+                submissionError('Terjadi gangguan sementara. Silakan coba lagi.', submitRealAnswers);
+            }
+        } catch (error) {
+            submissionError('Terjadi gangguan sementara. Silakan coba lagi.', submitRealAnswers);
+        }
     };
 
     const loadRealQuiz = async (attemptUuid) => {
@@ -464,6 +552,10 @@
                 return;
             }
             if (isFinal) {
+                if (realMode) {
+                    submitRealAnswers();
+                    return;
+                }
                 setState('ANALYZING');
                 return;
             }
@@ -554,6 +646,7 @@
             RESULT_HANDOFF: renderHandoff,
             STARTING: () => renderLoading('Menyiapkan sesi...'),
             LOADING_QUIZ: () => renderLoading('Memuat kuis...'),
+            SUBMITTING: () => renderLoading('Menyimpan jawabanmu...'),
             ERROR: renderError,
         };
         root.append((views[state.screen] || renderLanding)());
