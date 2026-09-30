@@ -1,7 +1,12 @@
 <?php
 ob_start();
 ?>
-<main id="monitor-shell" class="monitor-shell" data-monitor-alias="<?= $monitorAlias ?>">
+<main
+    id="monitor-shell"
+    class="monitor-shell"
+    data-monitor-alias="<?= $monitorAlias ?>"
+    data-monitor-qr-target="<?= $smartQrTarget ?>"
+>
     <header class="monitor-header">
         <a class="monitor-brand" href="/" aria-label="SMK Match">
             <img src="/assets/mascots/mascot-all.png" alt="" width="56" height="56">
@@ -20,36 +25,57 @@ ob_start();
                     <div class="monitor-slide__copy">
                         <p class="monitor-kicker">SMK MATCH LIVE</p>
                         <h1 id="monitor-overview-title">Jelajahi potensi siswa bersama.</h1>
-                        <p>Ruang monitor ini menyiapkan tampilan ringkas untuk aktivitas dan arah minat sekolah.</p>
+                        <p data-monitor-overview-batch>Menyiapkan ringkasan batch aktif.</p>
+                        <dl class="monitor-summary" aria-label="Ringkasan batch aktif">
+                            <div><dt>Mulai</dt><dd data-monitor-started-count>—</dd></div>
+                            <div><dt>Selesai</dt><dd data-monitor-completed-count>—</dd></div>
+                            <div><dt>Setara</dt><dd data-monitor-tie-count>—</dd></div>
+                        </dl>
+                        <div class="monitor-program-metrics" data-monitor-program-metrics aria-label="Metrik program"></div>
                     </div>
                     <img class="monitor-hero monitor-hero--overview" src="/assets/mascots/mascot-all.png" alt="Maskot SMK Match">
                 </section>
 
-                <section class="monitor-slide monitor-slide--dkv" data-monitor-slide="dkv" aria-labelledby="monitor-dkv-title" hidden>
+                <section class="monitor-slide monitor-slide--dkv" data-monitor-slide="dkv" data-monitor-program-code="DKV" aria-labelledby="monitor-dkv-title" hidden>
                     <div class="monitor-slide__copy">
-                        <p class="monitor-kicker">PROGRAM SPOTLIGHT</p>
-                        <h2 id="monitor-dkv-title">DKV</h2>
-                        <p>Ruang sorot untuk cerita, karya, dan energi kreatif yang sedang dijelajahi siswa.</p>
+                        <p class="monitor-kicker" data-program-title>PROGRAM SPOTLIGHT</p>
+                        <h2 id="monitor-dkv-title" data-program-name>DKV</h2>
+                        <p data-program-description>Menyiapkan sorotan program dari snapshot kuis aktif.</p>
+                        <dl class="monitor-program-summary" data-program-summary>
+                            <div><dt>Dominan</dt><dd data-program-dominant-count>—</dd></div>
+                            <div><dt>Rata-rata</dt><dd data-program-average-percentage>—</dd></div>
+                        </dl>
+                        <p class="monitor-unavailable" data-program-unavailable hidden>Program ini tidak tersedia pada versi kuis aktif.</p>
                     </div>
-                    <img class="monitor-hero" src="/assets/mascots/dkv/dkv-hero.png" alt="Maskot DKV">
+                    <img class="monitor-hero" data-program-mascot src="/assets/mascots/dkv/dkv-hero.png" alt="Maskot DKV">
                 </section>
 
-                <section class="monitor-slide monitor-slide--mplb" data-monitor-slide="mplb" aria-labelledby="monitor-mplb-title" hidden>
+                <section class="monitor-slide monitor-slide--mplb" data-monitor-slide="mplb" data-monitor-program-code="MPLB" aria-labelledby="monitor-mplb-title" hidden>
                     <div class="monitor-slide__copy">
-                        <p class="monitor-kicker">PROGRAM SPOTLIGHT</p>
-                        <h2 id="monitor-mplb-title">MPLB</h2>
-                        <p>Ruang sorot untuk ketelitian, koordinasi, dan pengalaman mengatur banyak hal.</p>
+                        <p class="monitor-kicker" data-program-title>PROGRAM SPOTLIGHT</p>
+                        <h2 id="monitor-mplb-title" data-program-name>MPLB</h2>
+                        <p data-program-description>Menyiapkan sorotan program dari snapshot kuis aktif.</p>
+                        <dl class="monitor-program-summary" data-program-summary>
+                            <div><dt>Dominan</dt><dd data-program-dominant-count>—</dd></div>
+                            <div><dt>Rata-rata</dt><dd data-program-average-percentage>—</dd></div>
+                        </dl>
+                        <p class="monitor-unavailable" data-program-unavailable hidden>Program ini tidak tersedia pada versi kuis aktif.</p>
                     </div>
-                    <img class="monitor-hero" src="/assets/mascots/mplb/mplb-hero.png" alt="Maskot MPLB">
+                    <img class="monitor-hero" data-program-mascot src="/assets/mascots/mplb/mplb-hero.png" alt="Maskot MPLB">
                 </section>
 
-                <section class="monitor-slide monitor-slide--pm" data-monitor-slide="pm" aria-labelledby="monitor-pm-title" hidden>
+                <section class="monitor-slide monitor-slide--pm" data-monitor-slide="pm" data-monitor-program-code="PM" aria-labelledby="monitor-pm-title" hidden>
                     <div class="monitor-slide__copy">
-                        <p class="monitor-kicker">PROGRAM SPOTLIGHT</p>
-                        <h2 id="monitor-pm-title">PM</h2>
-                        <p>Ruang sorot untuk hubungan, ide, dan peluang yang dapat dikembangkan bersama.</p>
+                        <p class="monitor-kicker" data-program-title>PROGRAM SPOTLIGHT</p>
+                        <h2 id="monitor-pm-title" data-program-name>PM</h2>
+                        <p data-program-description>Menyiapkan sorotan program dari snapshot kuis aktif.</p>
+                        <dl class="monitor-program-summary" data-program-summary>
+                            <div><dt>Dominan</dt><dd data-program-dominant-count>—</dd></div>
+                            <div><dt>Rata-rata</dt><dd data-program-average-percentage>—</dd></div>
+                        </dl>
+                        <p class="monitor-unavailable" data-program-unavailable hidden>Program ini tidak tersedia pada versi kuis aktif.</p>
                     </div>
-                    <img class="monitor-hero" src="/assets/mascots/pm/pm-hero.png" alt="Maskot PM">
+                    <img class="monitor-hero" data-program-mascot src="/assets/mascots/pm/pm-hero.png" alt="Maskot PM">
                 </section>
             </div>
 
@@ -66,11 +92,11 @@ ob_start();
         </section>
 
         <aside class="monitor-sidebar" aria-label="Panel monitor">
-            <section class="monitor-panel monitor-qr-placeholder" aria-labelledby="monitor-qr-title">
-                <p class="monitor-panel__eyebrow">BAGIKAN RUANG INI</p>
-                <h2 id="monitor-qr-title">QR monitor</h2>
-                <div class="monitor-qr-art" aria-hidden="true"><span></span><span></span><span></span></div>
-                <p>Area QR akan tersedia pada tahap berikutnya.</p>
+            <section class="monitor-panel monitor-qr" aria-labelledby="monitor-qr-title">
+                <p class="monitor-panel__eyebrow">MULAI KUIS</p>
+                <h2 id="monitor-qr-title">Scan QR</h2>
+                <div class="monitor-qr-code" data-monitor-qr-code role="img" aria-label="QR untuk membuka kuis"></div>
+                <p data-monitor-qr-copy>Scan untuk membuka tautan kuis aktif.</p>
             </section>
 
             <section class="monitor-panel monitor-activity" aria-labelledby="monitor-activity-title">
@@ -79,12 +105,10 @@ ob_start();
                         <p class="monitor-panel__eyebrow">AKTIVITAS TERBARU</p>
                         <h2 id="monitor-activity-title">Live activity</h2>
                     </div>
-                    <span class="monitor-shell-badge">SHELL</span>
+                    <span class="monitor-shell-badge" data-monitor-live-badge>LIVE</span>
                 </div>
                 <ol class="monitor-activity-list">
                     <li><span class="monitor-avatar">?</span><span>Aktivitas peserta akan tampil di sini.</span></li>
-                    <li><span class="monitor-avatar">?</span><span>Ringkasan hasil terbaru akan muncul di panel ini.</span></li>
-                    <li><span class="monitor-avatar">?</span><span>Panel ini belum memuat data langsung.</span></li>
                 </ol>
             </section>
         </aside>

@@ -2,6 +2,7 @@
     "use strict";
 
     const POLLING_INTERVAL_MS = 5000;
+    const SLIDE_DURATION_MS = 12000;
     const VISIBLE_EVENT_LIMIT = 20;
     const shell = document.getElementById("monitor-shell");
 
@@ -15,6 +16,9 @@
     const activityList = shell.querySelector(".monitor-activity-list");
     const status = shell.querySelector(".monitor-shell-status");
     const alias = shell.dataset.monitorAlias;
+    const qrTarget = shell.dataset.monitorQrTarget;
+    const qrCode = shell.querySelector("[data-monitor-qr-code]");
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
     const state = {
         activeBatchId: null,
         knownResultIds: new Set(),
@@ -23,6 +27,7 @@
         reconciliationAfterResultId: 0,
         requestInFlight: false,
         pollTimer: null,
+        slideTimer: null,
     };
     let activeIndex = 0;
 
@@ -47,11 +52,40 @@
         });
     }
 
+    function clearSlideTimer() {
+        if (state.slideTimer !== null) {
+            window.clearTimeout(state.slideTimer);
+            state.slideTimer = null;
+        }
+    }
+
+    function autoRotationEnabled() {
+        return !document.hidden && !reducedMotion.matches && slides.length > 1;
+    }
+
+    function scheduleSlideRotation() {
+        clearSlideTimer();
+
+        if (!autoRotationEnabled()) {
+            return;
+        }
+
+        state.slideTimer = window.setTimeout(() => {
+            showSlide((activeIndex + 1) % slides.length);
+            scheduleSlideRotation();
+        }, SLIDE_DURATION_MS);
+    }
+
+    function selectSlide(index) {
+        showSlide(index);
+        scheduleSlideRotation();
+    }
+
     indicators.forEach((indicator) => {
         indicator.addEventListener("click", () => {
             const target = indicator.getAttribute("data-monitor-target");
             const targetIndex = order.indexOf(target);
-            showSlide(targetIndex);
+            selectSlide(targetIndex);
         });
     });
 
@@ -61,14 +95,194 @@
             const nextIndex = direction === "next"
                 ? (activeIndex + 1) % slides.length
                 : (activeIndex - 1 + slides.length) % slides.length;
-            showSlide(nextIndex);
+            selectSlide(nextIndex);
         });
     });
+
+    document.addEventListener("visibilitychange", scheduleSlideRotation);
+    reducedMotion.addEventListener("change", scheduleSlideRotation);
 
     function setStatus(message) {
         if (status instanceof HTMLElement) {
             status.textContent = message;
         }
+    }
+
+    function programLabel(program) {
+        if (!program || typeof program !== "object") {
+            return "program";
+        }
+
+        if (typeof program.name === "string" && program.name.trim() !== "") {
+            return program.name;
+        }
+
+        return typeof program.code === "string" && program.code.trim() !== "" ? program.code : "program";
+    }
+
+    function formatPercentage(value) {
+        return Number.isFinite(value) ? `${value.toFixed(1)}%` : "—";
+    }
+
+    function renderOverview(monitor) {
+        const batch = monitor?.batch;
+        const summary = monitor?.summary;
+        const programs = Array.isArray(monitor?.programs) ? monitor.programs : [];
+        const batchTarget = shell.querySelector("[data-monitor-overview-batch]");
+
+        if (batchTarget instanceof HTMLElement) {
+            const label = typeof batch?.label === "string" && batch.label.trim() !== ""
+                ? batch.label
+                : "Batch aktif";
+            batchTarget.textContent = `${label} · Batch ${batch?.number ?? "—"}`;
+        }
+
+        const countTargets = [
+            ["[data-monitor-started-count]", summary?.started_count],
+            ["[data-monitor-completed-count]", summary?.completed_count],
+            ["[data-monitor-tie-count]", summary?.tie_count],
+        ];
+        countTargets.forEach(([selector, value]) => {
+            const target = shell.querySelector(selector);
+            if (target instanceof HTMLElement) {
+                target.textContent = Number.isInteger(value) && value >= 0 ? String(value) : "—";
+            }
+        });
+
+        const metricTarget = shell.querySelector("[data-monitor-program-metrics]");
+        if (!(metricTarget instanceof HTMLElement)) {
+            return;
+        }
+
+        const rows = programs.map((program) => {
+            const row = document.createElement("article");
+            const name = document.createElement("strong");
+            const metrics = document.createElement("span");
+
+            row.className = "monitor-program-metric";
+            name.textContent = programLabel(program);
+            metrics.textContent = `${Number.isInteger(program?.dominant_count) ? program.dominant_count : "—"} dominan · ${formatPercentage(program?.score_average_percentage)}`;
+            row.append(name, metrics);
+
+            return row;
+        });
+
+        metricTarget.replaceChildren(...rows);
+    }
+
+    function localMascotPath(path) {
+        if (typeof path !== "string" || path === "") {
+            return null;
+        }
+
+        try {
+            const candidate = new URL(path, window.location.origin);
+            return candidate.origin === window.location.origin && candidate.pathname.startsWith("/assets/")
+                ? `${candidate.pathname}${candidate.search}`
+                : null;
+        } catch (_error) {
+            return null;
+        }
+    }
+
+    function renderProgramSlide(slide, programs) {
+        const code = slide.dataset.monitorProgramCode;
+        const program = programs.find((candidate) => candidate?.code === code);
+        const unavailable = slide.querySelector("[data-program-unavailable]");
+        const title = slide.querySelector("[data-program-title]");
+        const name = slide.querySelector("[data-program-name]");
+        const description = slide.querySelector("[data-program-description]");
+        const summary = slide.querySelector("[data-program-summary]");
+        const dominantCount = slide.querySelector("[data-program-dominant-count]");
+        const averagePercentage = slide.querySelector("[data-program-average-percentage]");
+        const mascot = slide.querySelector("[data-program-mascot]");
+
+        if (!program) {
+            slide.classList.add("is-unavailable");
+            if (unavailable instanceof HTMLElement) {
+                unavailable.hidden = false;
+            }
+            if (summary instanceof HTMLElement) {
+                summary.hidden = true;
+            }
+            return;
+        }
+
+        slide.classList.remove("is-unavailable");
+        if (unavailable instanceof HTMLElement) {
+            unavailable.hidden = true;
+        }
+        if (summary instanceof HTMLElement) {
+            summary.hidden = false;
+        }
+        if (title instanceof HTMLElement) {
+            title.textContent = typeof program.personality_title === "string" && program.personality_title.trim() !== ""
+                ? program.personality_title
+                : "PROGRAM SPOTLIGHT";
+        }
+        if (name instanceof HTMLElement) {
+            name.textContent = programLabel(program);
+        }
+        if (description instanceof HTMLElement) {
+            description.textContent = typeof program.description === "string" && program.description.trim() !== ""
+                ? program.description
+                : (typeof program.tagline === "string" && program.tagline.trim() !== "" ? program.tagline : "Snapshot program tersedia pada batch aktif.");
+        }
+        if (dominantCount instanceof HTMLElement) {
+            dominantCount.textContent = Number.isInteger(program.dominant_count) ? String(program.dominant_count) : "—";
+        }
+        if (averagePercentage instanceof HTMLElement) {
+            averagePercentage.textContent = formatPercentage(program.score_average_percentage);
+        }
+        if (mascot instanceof HTMLImageElement) {
+            const path = localMascotPath(program.mascot_path);
+            mascot.hidden = path === null;
+            if (path !== null) {
+                mascot.src = path;
+                mascot.alt = `Maskot ${programLabel(program)}`;
+            }
+        }
+    }
+
+    function renderPresentation(monitor) {
+        const programs = Array.isArray(monitor?.programs) ? monitor.programs : [];
+
+        renderOverview(monitor);
+        slides.forEach((slide) => {
+            if (slide instanceof HTMLElement && slide.dataset.monitorProgramCode) {
+                renderProgramSlide(slide, programs);
+            }
+        });
+    }
+
+    function renderQrCode() {
+        if (!(qrCode instanceof HTMLElement) || typeof qrTarget !== "string" || qrTarget === "") {
+            return;
+        }
+
+        try {
+            window.SmkMatchQrSvg.render(qrCode, qrTarget, { foreground: "#25135d", background: "#ffffff" });
+        } catch (_error) {
+            qrCode.textContent = "QR tidak tersedia.";
+        }
+    }
+
+    function activityMessage(event, participantName) {
+        const outcome = event?.outcome;
+
+        if (outcome?.kind === "tie") {
+            const tiedPrograms = Array.isArray(outcome.tied_programs) ? outcome.tied_programs : [];
+            const labels = tiedPrograms.map(programLabel).filter((label) => label !== "program");
+            return labels.length > 0
+                ? `${participantName} menyelesaikan hasil setara: ${labels.join(", ")}.`
+                : `${participantName} menyelesaikan hasil setara.`;
+        }
+
+        if (outcome?.kind === "decisive" && outcome.dominant_program) {
+            return `${participantName} menyelesaikan kuis: ${programLabel(outcome.dominant_program)}.`;
+        }
+
+        return `${participantName} menyelesaikan kuis.`;
     }
 
     function eventSortOrder(left, right) {
@@ -109,13 +323,10 @@
             const avatar = document.createElement("span");
             const message = document.createElement("span");
             const participantName = typeof event.participant_name === "string" ? event.participant_name : "Peserta";
-            const outcomeKind = event.outcome?.kind;
 
             avatar.className = "monitor-avatar";
             avatar.textContent = participantName.slice(0, 1).toUpperCase() || "?";
-            message.textContent = outcomeKind === "tie"
-                ? `${participantName} menyelesaikan hasil setara.`
-                : `${participantName} menyelesaikan kuis.`;
+            message.textContent = activityMessage(event, participantName);
             row.append(avatar, message);
 
             return row;
@@ -161,6 +372,7 @@
             clearBatchState();
         }
 
+        renderPresentation(monitor);
         addRecentEvents(monitor.recent_activity);
     }
 
@@ -312,6 +524,8 @@
     }
 
     showSlide(activeIndex);
+    scheduleSlideRotation();
+    renderQrCode();
     renderVisibleEvents();
     poll();
 })();

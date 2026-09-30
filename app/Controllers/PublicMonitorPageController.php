@@ -25,6 +25,11 @@ final class PublicMonitorPageController
 
         $appName = htmlspecialchars($this->config->string('APP_NAME'), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $monitorAlias = htmlspecialchars($resolution->alias, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+        $smartQrTarget = htmlspecialchars(
+            rtrim($this->config->string('APP_URL'), '/') . '/go/' . rawurlencode($resolution->alias),
+            ENT_QUOTES | ENT_SUBSTITUTE,
+            'UTF-8',
+        );
 
         ob_start();
         require SMK_MATCH_ROOT . '/resources/views/pages/public-monitor.php';

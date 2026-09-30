@@ -6,6 +6,7 @@
     <meta name="theme-color" content="#25135d">
     <title><?= $appName ?> — Monitor</title>
     <link rel="stylesheet" href="/assets/css/monitor.css">
+    <script src="/assets/js/vendor/qrcode-generator.js" defer></script>
     <script src="/assets/js/monitor-shell.js" defer></script>
 </head>
 <body class="monitor-page">
