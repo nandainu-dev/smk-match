@@ -179,6 +179,25 @@ try {
     publicMonitorAssert(!publicMonitorHasForbiddenKey($payload) && !array_key_exists('after_result_id', $payload['monitor']), 'Monitor response exposes private data or a cursor.');
     publicMonitorAssert($before === publicMonitorCounts($connection), 'Monitor GET mutated persisted data.');
 
+    $reconciliation = $router->dispatch(new Request('GET', '/api/public/monitor/monitor-http', [], '', [], false, ['recentLimit' => '20', 'reconciliationAfterResultId' => '0']));
+    $reconciliationPayload = json_decode($reconciliation->body, true, 512, JSON_THROW_ON_ERROR);
+    publicMonitorAssert(
+        $reconciliation->status === 200
+        && count($reconciliationPayload['monitor']['reconciliation']['result_ids']) === 20
+        && $reconciliationPayload['monitor']['reconciliation']['has_more'] === true
+        && $reconciliationPayload['monitor']['reconciliation']['next_page_after_result_id'] === $reconciliationPayload['monitor']['reconciliation']['result_ids'][19]
+        && !publicMonitorHasForbiddenKey($reconciliationPayload),
+        'Bounded public reconciliation response is invalid.',
+    );
+    $reconciliationNext = $router->dispatch(new Request('GET', '/api/public/monitor/monitor-http', [], '', [], false, ['recentLimit' => '20', 'reconciliationAfterResultId' => (string) $reconciliationPayload['monitor']['reconciliation']['next_page_after_result_id']]));
+    $reconciliationNextPayload = json_decode($reconciliationNext->body, true, 512, JSON_THROW_ON_ERROR);
+    publicMonitorAssert(
+        $reconciliationNext->status === 200
+        && count($reconciliationNextPayload['monitor']['reconciliation']['result_ids']) === 1
+        && $reconciliationNextPayload['monitor']['reconciliation']['has_more'] === false,
+        'Public reconciliation pagination did not drain.',
+    );
+
     $limited = $router->dispatch(new Request('GET', '/api/public/monitor/monitor-http', [], '', [], false, ['recentLimit' => '1']));
     $limitedPayload = json_decode($limited->body, true, 512, JSON_THROW_ON_ERROR);
     publicMonitorAssert($limited->status === 200 && count($limitedPayload['monitor']['recent_activity']) === 1, 'Valid recentLimit was not forwarded.');
@@ -192,6 +211,12 @@ try {
         $invalid = $router->dispatch(new Request('GET', '/api/public/monitor/monitor-http', [], '', [], false, ['recentLimit' => $invalidValues]));
         publicMonitorAssert($invalid->status === 422, 'Repeated or array recentLimit was accepted.');
     }
+    foreach (['', '-1', '01', '1.5', 'abc'] as $invalidPosition) {
+        $invalid = $router->dispatch(new Request('GET', '/api/public/monitor/monitor-http', [], '', [], false, ['reconciliationAfterResultId' => $invalidPosition]));
+        publicMonitorAssert($invalid->status === 422 && $invalid->body === '{"ok":false,"error":"invalid_reconciliation_page"}', 'Invalid reconciliation page position was accepted: ' . $invalidPosition);
+    }
+    $repeatedPosition = $router->dispatch(new Request('GET', '/api/public/monitor/monitor-http', [], '', [], false, ['reconciliationAfterResultId' => ['0', '1']]));
+    publicMonitorAssert($repeatedPosition->status === 422, 'Repeated reconciliation page position was accepted.');
     foreach (['unknown-monitor', 'monitor-inactive', 'monitor-no-batch', 'admin', 'INVALID LINK'] as $alias) {
         $notFound = $router->dispatch(new Request('GET', '/api/public/monitor/' . $alias));
         publicMonitorAssert($notFound->status === 404 && $notFound->body === '{"ok":false,"error":"not_found"}', 'Unsafe monitor availability response: ' . $alias);

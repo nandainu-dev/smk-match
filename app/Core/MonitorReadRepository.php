@@ -24,10 +24,15 @@ final class MonitorReadRepository
      *     recent_events: list<array{result_id: int, participant_name: string, submitted_at: string, is_tie: bool, dominant_program: ?array{code: string, name: string, personality_title: ?string, mascot_path: ?string, primary_color: ?string, accent_color: ?string, tagline: ?string, description: ?string, superpower: ?string, skills: ?string, careers: ?string}, tied_programs: list<array{code: string, name: string, personality_title: ?string, mascot_path: ?string, primary_color: ?string, accent_color: ?string, tagline: ?string, description: ?string, superpower: ?string, skills: ?string, careers: ?string}>, ranking: list<array{display_order: int, normalized_percentage: float, program: array{code: string, name: string, personality_title: ?string, mascot_path: ?string, primary_color: ?string, accent_color: ?string, tagline: ?string, description: ?string, superpower: ?string, skills: ?string, careers: ?string}}>}
      * }|null
      */
-    public function readActiveBatch(int $campaignId, int $recentLimit = 20): ?array
+    public function readActiveBatch(
+        int $campaignId,
+        int $recentLimit = 20,
+        ?int $reconciliationAfterResultId = null,
+    ): ?array
     {
         $this->assertPositiveId($campaignId, 'Campaign identity');
         $this->assertRecentLimit($recentLimit);
+        $this->assertReconciliationAfterResultId($reconciliationAfterResultId);
 
         $batch = $this->findActiveBatch($campaignId);
         if ($batch === null) {
@@ -37,7 +42,7 @@ final class MonitorReadRepository
         $programsById = $this->findSnapshotProgramsByVersionId($batch['quiz_version_id']);
         $summary = $this->findSummary($batch['id']);
 
-        return [
+        $readModel = [
             'batch' => $batch,
             'summary' => $summary,
             'programs' => $this->findProgramMetrics(
@@ -53,6 +58,16 @@ final class MonitorReadRepository
                 $programsById,
             ),
         ];
+
+        if ($reconciliationAfterResultId !== null) {
+            $readModel['reconciliation'] = $this->findReconciliationPage(
+                $batch['id'],
+                $reconciliationAfterResultId,
+                $recentLimit,
+            );
+        }
+
+        return $readModel;
     }
 
     /** @return array{id: int, campaign_id: int, batch_number: int, quiz_version_id: int, label: ?string, started_at: string}|null */
@@ -293,6 +308,47 @@ final class MonitorReadRepository
     }
 
     /**
+     * Result IDs are used only to page a complete active-batch scan. They do
+     * not describe transaction commit order or live-feed delivery order.
+     *
+     * @return array{result_ids: list<int>, has_more: bool, next_page_after_result_id: ?int}
+     */
+    private function findReconciliationPage(int $batchId, int $afterResultId, int $recentLimit): array
+    {
+        $statement = $this->connection()->prepare(
+            'SELECT r.id AS result_id
+             FROM attempts AS a
+             INNER JOIN results AS r ON r.attempt_id = a.id
+             WHERE a.campaign_batch_id = :batch_id
+               AND a.status = :completed_status
+               AND r.id > :after_result_id
+             ORDER BY r.id ASC
+             LIMIT :page_limit'
+        );
+        $statement->bindValue('batch_id', $batchId, PDO::PARAM_INT);
+        $statement->bindValue('completed_status', self::COMPLETED_STATUS, PDO::PARAM_STR);
+        $statement->bindValue('after_result_id', $afterResultId, PDO::PARAM_INT);
+        $statement->bindValue('page_limit', $recentLimit + 1, PDO::PARAM_INT);
+        $statement->execute();
+
+        $resultIds = [];
+        foreach ($statement->fetchAll() as $row) {
+            $resultIds[] = $this->rowPositiveInt($row, 'result_id');
+        }
+
+        $hasMore = count($resultIds) > $recentLimit;
+        if ($hasMore) {
+            array_pop($resultIds);
+        }
+
+        return [
+            'result_ids' => $resultIds,
+            'has_more' => $hasMore,
+            'next_page_after_result_id' => $resultIds === [] ? null : $resultIds[array_key_last($resultIds)],
+        ];
+    }
+
+    /**
      * @param array<int, array{code: string, name: string, personality_title: ?string, mascot_path: ?string, primary_color: ?string, accent_color: ?string, tagline: ?string, description: ?string, superpower: ?string, skills: ?string, careers: ?string}> $programsById
      * @return list<array{display_order: int, normalized_percentage: float, program: array{code: string, name: string, personality_title: ?string, mascot_path: ?string, primary_color: ?string, accent_color: ?string, tagline: ?string, description: ?string, superpower: ?string, skills: ?string, careers: ?string}}>
      */
@@ -409,6 +465,13 @@ final class MonitorReadRepository
     {
         if ($recentLimit < 1 || $recentLimit > self::MAX_RECENT_EVENTS) {
             throw new \InvalidArgumentException('Recent monitor event limit must be between 1 and ' . self::MAX_RECENT_EVENTS . '.');
+        }
+    }
+
+    private function assertReconciliationAfterResultId(?int $resultId): void
+    {
+        if ($resultId !== null && $resultId < 0) {
+            throw new \InvalidArgumentException('Reconciliation page position must not be negative.');
         }
     }
 

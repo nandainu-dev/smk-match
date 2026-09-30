@@ -85,8 +85,11 @@ try {
     $script = file_get_contents(SMK_MATCH_ROOT . '/public/assets/js/monitor-shell.js');
     publicMonitorPageAssert(is_string($stylesheet) && str_contains($stylesheet, '@media (max-width: 1100px)') && str_contains($stylesheet, '@media (max-width: 700px)'), 'Responsive shell hooks are missing.');
     publicMonitorPageAssert(is_string($script), 'Monitor shell script could not be read.');
-    foreach (['fetch(', 'XMLHttpRequest', 'setInterval', 'setTimeout', 'WebSocket', 'EventSource', 'after_result_id'] as $forbidden) {
+    foreach (['XMLHttpRequest', 'WebSocket', 'EventSource', 'query.set("afterResultId"', 'query.set("after_result_id"'] as $forbidden) {
         publicMonitorPageAssert(!str_contains($script, $forbidden), 'Monitor shell contains forbidden live-data behavior: ' . $forbidden);
+    }
+    foreach (['POLLING_INTERVAL_MS = 5000', 'window.fetch', 'requestInFlight', 'knownResultIds', 'reconciliationAfterResultId', 'next_page_after_result_id', 'has_more', 'VISIBLE_EVENT_LIMIT = 20', 'clearBatchState', 'state.activeBatchId !== batchId', 'state.knownResultIds.size === completedCount(monitor)', 'reconciliationIsNeeded(reconciliationMonitor)', 'state.reconciliationAfterResultId = 0'] as $required) {
+        publicMonitorPageAssert(str_contains($script, $required), 'Monitor shell reconciliation behavior is missing: ' . $required);
     }
 
     echo "Public monitor page tests passed.\n";

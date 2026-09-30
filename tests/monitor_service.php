@@ -414,6 +414,20 @@ try {
         !array_key_exists('after_result_id', $payload),
         'Monitor payload added a strict result cursor.',
     );
+    $reconciliationSnapshot = $service->read('monitor-link', 1, 0);
+    $reconciliationPayload = $reconciliationSnapshot->toArray();
+    monitorServiceAssert(
+        count($reconciliationPayload['reconciliation']['result_ids']) === 1
+        && $reconciliationPayload['reconciliation']['result_ids'][0] > 0
+        && $reconciliationPayload['reconciliation']['has_more'] === true
+        && $reconciliationPayload['reconciliation']['next_page_after_result_id'] === $reconciliationPayload['reconciliation']['result_ids'][0]
+        && !monitorServiceContainsForbiddenKey($reconciliationPayload),
+        'Reconciliation snapshot is not public-safe or bounded.',
+    );
+    expectMonitorServiceInvalid(
+        static fn() => $service->read('monitor-link', 1, -1),
+        'Negative reconciliation page position was accepted.',
+    );
 } finally {
     if ($admin instanceof PDO) {
         $admin->exec('DROP DATABASE IF EXISTS ' . MONITOR_SERVICE_TEST_DATABASE);

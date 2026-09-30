@@ -365,7 +365,7 @@ try {
         'completed',
         '2026-10-01 09:00:00',
     );
-    monitorInsertResult($connection, $archivedAttempt, $programIds['ZETA'], false, [
+    $archivedResult = monitorInsertResult($connection, $archivedAttempt, $programIds['ZETA'], false, [
         ['program_id' => $programIds['ZETA'], 'percentage' => 100.0],
         ['program_id' => $programIds['ALPHA'], 'percentage' => 0.0],
         ['program_id' => $programIds['OMEGA'], 'percentage' => 0.0],
@@ -381,7 +381,7 @@ try {
         'completed',
         '2026-10-01 09:30:00',
     );
-    monitorInsertResult($connection, $otherCampaignAttempt, $programIds['OMEGA'], false, [
+    $otherCampaignResult = monitorInsertResult($connection, $otherCampaignAttempt, $programIds['OMEGA'], false, [
         ['program_id' => $programIds['OMEGA'], 'percentage' => 100.0],
         ['program_id' => $programIds['ZETA'], 'percentage' => 0.0],
         ['program_id' => $programIds['ALPHA'], 'percentage' => 0.0],
@@ -478,6 +478,90 @@ try {
         monitorAssert(!str_contains($payload, '"' . $forbiddenKey . '"'), 'Monitor payload leaks ' . $forbiddenKey . '.');
     }
     monitorAssert($firstResult > 0, 'Fixture did not create first active result.');
+
+    for ($suffix = 7; $suffix <= 58; $suffix++) {
+        $attemptId = monitorInsertAttempt(
+            $connection,
+            monitorInsertParticipant($connection, $fixture['school_id'], $suffix),
+            $fixture['campaign_a'],
+            $fixture['active_batch'],
+            $fixture['quiz_version_id'],
+            $suffix,
+            'completed',
+            sprintf('2026-10-01 11:%02d:00', $suffix % 60),
+        );
+        monitorInsertResult($connection, $attemptId, $programIds['ALPHA'], false, [
+            ['program_id' => $programIds['ALPHA'], 'percentage' => 100.0],
+            ['program_id' => $programIds['ZETA'], 'percentage' => 0.0],
+            ['program_id' => $programIds['OMEGA'], 'percentage' => 0.0],
+            ['program_id' => $programIds['BETA'], 'percentage' => 0.0],
+        ]);
+    }
+
+    $beforeReconciliationCounts = monitorRowCounts($connection);
+    $firstReconciliationPage = $repository->readActiveBatch($fixture['campaign_a'], 50, 0);
+    $afterReconciliationCounts = monitorRowCounts($connection);
+    monitorAssert($firstReconciliationPage !== null, 'Reconciliation did not resolve the active batch.');
+    monitorAssert($beforeReconciliationCounts === $afterReconciliationCounts, 'Reconciliation changed persistent state.');
+    $firstPage = $firstReconciliationPage['reconciliation'];
+    $firstPageSortedIds = $firstPage['result_ids'];
+    sort($firstPageSortedIds, SORT_NUMERIC);
+    monitorAssert(
+        count($firstPage['result_ids']) === 50
+        && $firstPage['has_more'] === true
+        && $firstPage['next_page_after_result_id'] === $firstPage['result_ids'][49]
+        && $firstPage['result_ids'] === array_values(array_unique($firstPage['result_ids']))
+        && $firstPage['result_ids'] === $firstPageSortedIds,
+        'Reconciliation first page is not a bounded ascending ID page.',
+    );
+    monitorAssert(
+        !in_array($archivedResult, $firstPage['result_ids'], true)
+        && !in_array($otherCampaignResult, $firstPage['result_ids'], true),
+        'Reconciliation exposed attempts outside the active batch.',
+    );
+
+    $secondReconciliationPage = $repository->readActiveBatch(
+        $fixture['campaign_a'],
+        50,
+        $firstPage['next_page_after_result_id'],
+    );
+    monitorAssert($secondReconciliationPage !== null, 'Reconciliation second page did not resolve the active batch.');
+    $secondPage = $secondReconciliationPage['reconciliation'];
+    monitorAssert(
+        count($secondPage['result_ids']) === 5
+        && $secondPage['has_more'] === false
+        && $secondPage['next_page_after_result_id'] === $secondPage['result_ids'][4]
+        && $secondPage['result_ids'][0] > $firstPage['next_page_after_result_id'],
+        'Reconciliation did not drain the remaining active-batch IDs.',
+    );
+    $allKnownIds = array_values(array_unique([...$firstPage['result_ids'], ...$secondPage['result_ids']]));
+    monitorAssert(
+        count($allKnownIds) === $secondReconciliationPage['summary']['completed_count'],
+        'Reconciliation IDs do not match the authoritative completed count.',
+    );
+    $simulatedKnownIds = array_values(array_filter(
+        $allKnownIds,
+        static fn(int $resultId): bool => $resultId !== $firstPage['result_ids'][0],
+    ));
+    monitorAssert(
+        count($simulatedKnownIds) < $secondReconciliationPage['summary']['completed_count'],
+        'Late-result reconciliation fixture did not create a completeness mismatch.',
+    );
+    $restartPage = $repository->readActiveBatch($fixture['campaign_a'], 50, 0);
+    monitorAssert($restartPage !== null, 'Reconciliation restart did not resolve the active batch.');
+    $recoveredKnownIds = array_values(array_unique([...$simulatedKnownIds, ...$restartPage['reconciliation']['result_ids']]));
+    monitorAssert(
+        in_array($firstPage['result_ids'][0], $recoveredKnownIds, true),
+        'Restarting reconciliation from zero did not recover the simulated late older ID.',
+    );
+
+    $invalidReconciliationPositionRejected = false;
+    try {
+        $repository->readActiveBatch($fixture['campaign_a'], 1, -1);
+    } catch (InvalidArgumentException) {
+        $invalidReconciliationPositionRejected = true;
+    }
+    monitorAssert($invalidReconciliationPositionRejected, 'Negative reconciliation page position was accepted.');
 
     echo "Monitor read repository tests passed.\n";
 } finally {

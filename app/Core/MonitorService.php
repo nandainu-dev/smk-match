@@ -13,10 +13,18 @@ final class MonitorService
     ) {
     }
 
-    public function read(string $alias, int $recentLimit = 20): MonitorSnapshot
+    public function read(
+        string $alias,
+        int $recentLimit = 20,
+        ?int $reconciliationAfterResultId = null,
+    ): MonitorSnapshot
     {
         $resolution = $this->smartLinks->resolve($alias);
-        $readModel = $this->monitorReads->readActiveBatch($resolution->campaignId, $recentLimit);
+        $readModel = $this->monitorReads->readActiveBatch(
+            $resolution->campaignId,
+            $recentLimit,
+            $reconciliationAfterResultId,
+        );
 
         if ($readModel === null) {
             throw new RuntimeException('Monitor campaign has no active batch.');

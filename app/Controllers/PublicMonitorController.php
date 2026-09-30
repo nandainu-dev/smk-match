@@ -26,7 +26,13 @@ final class PublicMonitorController
         }
 
         try {
-            $snapshot = $this->monitors->read($alias, $recentLimit);
+            $reconciliationAfterResultId = $this->reconciliationAfterResultId($request);
+        } catch (InvalidArgumentException) {
+            return $this->error('invalid_reconciliation_page', 422);
+        }
+
+        try {
+            $snapshot = $this->monitors->read($alias, $recentLimit, $reconciliationAfterResultId);
         } catch (InvalidArgumentException) {
             return $this->error('not_found', 404);
         } catch (RuntimeException $exception) {
@@ -56,6 +62,29 @@ final class PublicMonitorController
         $value = $values[0];
         if (preg_match('/^(?:[1-9]|[1-4][0-9]|50)$/D', $value) !== 1) {
             throw new InvalidArgumentException('Invalid recent limit.');
+        }
+
+        return (int) $value;
+    }
+
+    private function reconciliationAfterResultId(Request $request): ?int
+    {
+        $values = $request->queryValues('reconciliationAfterResultId');
+        if ($values === null) {
+            return null;
+        }
+
+        if (count($values) !== 1 || !is_string($values[0])) {
+            throw new InvalidArgumentException('Invalid reconciliation page position.');
+        }
+
+        $value = $values[0];
+        if (preg_match('/^(?:0|[1-9][0-9]*)$/D', $value) !== 1) {
+            throw new InvalidArgumentException('Invalid reconciliation page position.');
+        }
+        if (strlen($value) > strlen((string) PHP_INT_MAX)
+            || (strlen($value) === strlen((string) PHP_INT_MAX) && strcmp($value, (string) PHP_INT_MAX) > 0)) {
+            throw new InvalidArgumentException('Invalid reconciliation page position.');
         }
 
         return (int) $value;

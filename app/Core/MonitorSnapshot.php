@@ -12,6 +12,7 @@ final class MonitorSnapshot
      * @param array{started_count: int, completed_count: int, tie_count: int} $summary
      * @param list<array<string, mixed>> $programs
      * @param list<array<string, mixed>> $recentActivity
+     * @param array{result_ids: list<int>, has_more: bool, next_page_after_result_id: ?int}|null $reconciliation
      */
     private function __construct(
         public readonly string $alias,
@@ -19,6 +20,7 @@ final class MonitorSnapshot
         public readonly array $summary,
         public readonly array $programs,
         public readonly array $recentActivity,
+        public readonly ?array $reconciliation,
     ) {
         if (SmartLink::canonicalAlias($this->alias) !== $this->alias) {
             throw new \InvalidArgumentException('Monitor snapshot alias must be canonical.');
@@ -30,7 +32,8 @@ final class MonitorSnapshot
      *     batch: array{id: int, campaign_id: int, batch_number: int, quiz_version_id: int, label: ?string, started_at: string},
      *     summary: array{started_count: int, completed_count: int, tie_count: int},
      *     programs: list<array<string, mixed>>,
-     *     recent_events: list<array<string, mixed>>
+     *     recent_events: list<array<string, mixed>>,
+     *     reconciliation?: array{result_ids: list<int>, has_more: bool, next_page_after_result_id: ?int}
      * } $readModel
      */
     public static function fromReadModel(string $alias, array $readModel): self
@@ -48,19 +51,28 @@ final class MonitorSnapshot
             $readModel['summary'],
             array_map(self::publicProgramMetric(...), $readModel['programs']),
             array_map(self::publicEvent(...), $readModel['recent_events']),
+            array_key_exists('reconciliation', $readModel)
+                ? self::publicReconciliation($readModel['reconciliation'])
+                : null,
         );
     }
 
-    /** @return array{alias: string, batch: array{id: int, number: int, label: ?string, started_at: string}, summary: array{started_count: int, completed_count: int, tie_count: int}, programs: list<array<string, mixed>>, recent_activity: list<array<string, mixed>>} */
+    /** @return array<string, mixed> */
     public function toArray(): array
     {
-        return [
+        $snapshot = [
             'alias' => $this->alias,
             'batch' => $this->batch,
             'summary' => $this->summary,
             'programs' => $this->programs,
             'recent_activity' => $this->recentActivity,
         ];
+
+        if ($this->reconciliation !== null) {
+            $snapshot['reconciliation'] = $this->reconciliation;
+        }
+
+        return $snapshot;
     }
 
     /** @param array<string, mixed> $program @return array<string, mixed> */
@@ -147,6 +159,45 @@ final class MonitorSnapshot
                     'program' => self::publicProgramPresentation(self::arrayValue($row, 'program')),
                 ];
             }, $ranking),
+        ];
+    }
+
+    /** @param array<string, mixed> $page @return array{result_ids: list<int>, has_more: bool, next_page_after_result_id: ?int} */
+    private static function publicReconciliation(mixed $page): array
+    {
+        if (!is_array($page)) {
+            throw new RuntimeException('Invalid monitor reconciliation data.');
+        }
+
+        $resultIds = $page['result_ids'] ?? null;
+        if (!is_array($resultIds) || !array_is_list($resultIds)) {
+            throw new RuntimeException('Invalid monitor reconciliation data.');
+        }
+
+        $seenResultIds = [];
+        foreach ($resultIds as $resultId) {
+            if (!is_int($resultId) || $resultId < 1 || isset($seenResultIds[$resultId])) {
+                throw new RuntimeException('Invalid monitor reconciliation data.');
+            }
+
+            $seenResultIds[$resultId] = true;
+        }
+
+        $nextPageAfterResultId = $page['next_page_after_result_id'] ?? null;
+        if ($nextPageAfterResultId !== null && (!is_int($nextPageAfterResultId) || $nextPageAfterResultId < 1)) {
+            throw new RuntimeException('Invalid monitor reconciliation data.');
+        }
+        if ($resultIds === [] && $nextPageAfterResultId !== null) {
+            throw new RuntimeException('Invalid monitor reconciliation data.');
+        }
+        if ($resultIds !== [] && $nextPageAfterResultId !== $resultIds[array_key_last($resultIds)]) {
+            throw new RuntimeException('Invalid monitor reconciliation data.');
+        }
+
+        return [
+            'result_ids' => $resultIds,
+            'has_more' => self::bool($page, 'has_more'),
+            'next_page_after_result_id' => $nextPageAfterResultId,
         ];
     }
 
