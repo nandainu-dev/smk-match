@@ -41,6 +41,8 @@ function publicStartVersion(PDO $connection, int $quizId, int $programId, int $n
     ]);
     $versionId = (int) $connection->lastInsertId();
     $connection->prepare('INSERT INTO quiz_version_programs (quiz_version_id, program_id, created_at) VALUES (:version_id, :program_id, UTC_TIMESTAMP())')->execute(['version_id' => $versionId, 'program_id' => $programId]);
+    $membershipId = (int) $connection->lastInsertId();
+    $connection->prepare("INSERT INTO quiz_version_program_presentations (quiz_version_program_id, program_code_snapshot, program_name_snapshot, personality_title_snapshot, mascot_path_snapshot, description_snapshot, skills_snapshot, snapshot_provenance, created_at, updated_at) SELECT :membership_id, short_name, name, personality_title, mascot_path, description, skills_json, 'version_snapshot', UTC_TIMESTAMP(), UTC_TIMESTAMP() FROM programs WHERE id = :program_id")->execute(['membership_id' => $membershipId, 'program_id' => $programId]);
     $questions = [];
     foreach ([1, 2] as $order) {
         $connection->prepare('INSERT INTO questions (quiz_version_id, prompt, sort_order, created_at, updated_at) VALUES (:version_id, :prompt, :order, UTC_TIMESTAMP(), UTC_TIMESTAMP())')->execute(['version_id' => $versionId, 'prompt' => 'HTTP Question ' . $order, 'order' => $order]);

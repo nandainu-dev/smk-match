@@ -10,8 +10,11 @@ use RuntimeException;
 
 final class QuizVersionRepository
 {
-    public function __construct(private readonly Database $database)
+    private readonly QuizVersionProgramPresentationRepository $presentations;
+
+    public function __construct(private readonly Database $database, ?QuizVersionProgramPresentationRepository $presentations = null)
     {
+        $this->presentations = $presentations ?? new QuizVersionProgramPresentationRepository($database);
     }
 
     public function findByQuizAndVersion(int $quizId, int $versionNumber): ?QuizVersion
@@ -87,7 +90,7 @@ final class QuizVersionRepository
         return (bool) $statement->fetchColumn();
     }
 
-    public function createDraftSnapshot(int $quizId, QuizDefinition $approvedSnapshot): QuizVersion
+    public function createDraftSnapshot(int $quizId, QuizDefinition $approvedSnapshot, ?int $sourceVersionId = null): QuizVersion
     {
         $this->assertPositiveId($quizId, 'Quiz identity');
         $approvedSnapshot->validate();
@@ -99,7 +102,9 @@ final class QuizVersionRepository
             $schoolId = $this->lockQuizIdentity($connection, $quizId);
             $this->assertNoEditableDraftLocked($connection, $quizId);
             $versionNumber = $this->nextVersionNumberLocked($connection, $quizId);
-            $programIds = $this->resolveProgramIds($connection, $schoolId, $approvedSnapshot->programs);
+            $programIds = $sourceVersionId === null
+                ? $this->resolveProgramIds($connection, $schoolId, $approvedSnapshot->programs)
+                : $this->resolveSourceProgramIds($connection, $sourceVersionId, $approvedSnapshot->programs);
 
             $statement = $connection->prepare(
                 'INSERT INTO quiz_versions (quiz_id, version_number, status, name, created_at)
@@ -113,7 +118,12 @@ final class QuizVersionRepository
             ]);
 
             $versionId = (int) $connection->lastInsertId();
-            $this->insertProgramMemberships($connection, $versionId, $programIds);
+            $membershipIds = $this->insertProgramMemberships($connection, $versionId, $programIds);
+            if ($sourceVersionId === null) {
+                $this->createCurrentProgramPresentations($connection, $membershipIds, $programIds);
+            } else {
+                $this->copySourcePresentations($sourceVersionId, $membershipIds);
+            }
             $this->insertQuestions($connection, $versionId, $approvedSnapshot->questions, $programIds);
             $version = $this->requireHydratedVersion($versionId);
             $connection->commit();
@@ -251,19 +261,106 @@ final class QuizVersionRepository
         return $programIds;
     }
 
-    /** @param array<string, int> $programIds */
-    private function insertProgramMemberships(PDO $connection, int $versionId, array $programIds): void
+    /** @param array<string, bool> $programs @return array<string, int> */
+    private function resolveSourceProgramIds(PDO $connection, int $sourceVersionId, array $programs): array
+    {
+        $statement = $connection->prepare(
+            'SELECT qvpp.program_code_snapshot, qvp.program_id
+             FROM quiz_version_programs AS qvp
+             INNER JOIN quiz_version_program_presentations AS qvpp ON qvpp.quiz_version_program_id = qvp.id
+             WHERE qvp.quiz_version_id = :version_id'
+        );
+        $statement->execute(['version_id' => $sourceVersionId]);
+        $programIds = [];
+        foreach ($statement->fetchAll() as $row) {
+            $code = $this->rowString($row, 'program_code_snapshot');
+            if (isset($programIds[$code])) {
+                throw new RuntimeException('Persistence invariant violation: duplicate source presentation code.');
+            }
+            $programIds[$code] = $this->rowInt($row, 'program_id');
+        }
+        $expectedCodes = array_keys($programs);
+        $actualCodes = array_keys($programIds);
+        sort($expectedCodes, SORT_STRING);
+        sort($actualCodes, SORT_STRING);
+        if ($expectedCodes !== $actualCodes) {
+            throw new RuntimeException('Persistence invariant violation: source program snapshot is incomplete.');
+        }
+
+        return $programIds;
+    }
+
+    /** @param array<string, int> $programIds @return array<string, int> */
+    private function insertProgramMemberships(PDO $connection, int $versionId, array $programIds): array
     {
         $statement = $connection->prepare(
             'INSERT INTO quiz_version_programs (quiz_version_id, program_id, created_at)
              VALUES (:quiz_version_id, :program_id, UTC_TIMESTAMP())'
         );
 
-        foreach ($programIds as $programId) {
+        $membershipIds = [];
+        foreach ($programIds as $programCode => $programId) {
             $statement->execute([
                 'quiz_version_id' => $versionId,
                 'program_id' => $programId,
             ]);
+            $membershipIds[$programCode] = (int) $connection->lastInsertId();
+        }
+
+        return $membershipIds;
+    }
+
+    /** @param array<string, int> $membershipIds @param array<string, int> $programIds */
+    private function createCurrentProgramPresentations(PDO $connection, array $membershipIds, array $programIds): void
+    {
+        $statement = $connection->prepare(
+            'SELECT short_name, name, personality_title, mascot_path, description, skills_json
+             FROM programs
+             WHERE id = :program_id'
+        );
+        foreach ($membershipIds as $programCode => $membershipId) {
+            $statement->execute(['program_id' => $programIds[$programCode]]);
+            $row = $statement->fetch();
+            if ($row === false) {
+                throw new RuntimeException('Configured program disappeared during snapshot creation.');
+            }
+            $this->presentations->create(new QuizVersionProgramPresentation(
+                $membershipId,
+                $this->rowString($row, 'short_name'),
+                $this->rowString($row, 'name'),
+                $this->nullableRowString($row, 'personality_title'),
+                $this->nullableRowString($row, 'mascot_path'),
+                null,
+                null,
+                null,
+                $this->nullableRowString($row, 'description'),
+                null,
+                $this->nullableRowString($row, 'skills_json'),
+                null,
+                'version_snapshot',
+            ));
+        }
+    }
+
+    /** @param array<string, int> $targetMembershipIds */
+    private function copySourcePresentations(int $sourceVersionId, array $targetMembershipIds): void
+    {
+        $sourceByCode = [];
+        foreach ($this->presentations->findAllByQuizVersionId($sourceVersionId) as $presentation) {
+            if (isset($sourceByCode[$presentation->programCodeSnapshot])) {
+                throw new RuntimeException('Persistence invariant violation: duplicate source presentation code.');
+            }
+            $sourceByCode[$presentation->programCodeSnapshot] = $presentation;
+        }
+        $sourceCodes = array_keys($sourceByCode);
+        $targetCodes = array_keys($targetMembershipIds);
+        sort($sourceCodes, SORT_STRING);
+        sort($targetCodes, SORT_STRING);
+        if ($sourceCodes !== $targetCodes) {
+            throw new RuntimeException('Persistence invariant violation: source presentation snapshot membership is incomplete.');
+        }
+        foreach ($targetMembershipIds as $programCode => $membershipId) {
+            $this->presentations->copyToMembership($sourceByCode[$programCode], $membershipId);
         }
     }
 
@@ -389,13 +486,14 @@ final class QuizVersionRepository
     private function hydrateProgramIds(int $versionId): array
     {
         $statement = $this->connection()->prepare(
-            'SELECT p.id, p.short_name, p.school_id, q.school_id AS quiz_school_id
+            'SELECT p.id, qvpp.program_code_snapshot, p.school_id, q.school_id AS quiz_school_id
              FROM quiz_version_programs AS qvp
+             INNER JOIN quiz_version_program_presentations AS qvpp ON qvpp.quiz_version_program_id = qvp.id
              INNER JOIN quiz_versions AS qv ON qv.id = qvp.quiz_version_id
              INNER JOIN quizzes AS q ON q.id = qv.quiz_id
              INNER JOIN programs AS p ON p.id = qvp.program_id
              WHERE qvp.quiz_version_id = :quiz_version_id
-             ORDER BY p.short_name ASC, p.id ASC'
+             ORDER BY qvpp.program_code_snapshot ASC, p.id ASC'
         );
         $statement->execute(['quiz_version_id' => $versionId]);
         $rows = $statement->fetchAll();
@@ -406,7 +504,7 @@ final class QuizVersionRepository
                 throw new RuntimeException('Persistence invariant violation: version program belongs to another school.');
             }
 
-            $programCode = $this->rowString($row, 'short_name');
+            $programCode = $this->rowString($row, 'program_code_snapshot');
             if (isset($programIds[$programCode])) {
                 throw new RuntimeException('Persistence invariant violation: duplicate version program code.');
             }
@@ -453,9 +551,15 @@ final class QuizVersionRepository
     private function hydrateWeights(int $optionId, array $programIds): array
     {
         $weightsStatement = $this->connection()->prepare(
-            'SELECT ow.program_id, p.short_name, ow.weight
+            'SELECT ow.program_id, qvpp.program_code_snapshot, ow.weight
              FROM option_weights AS ow
-             INNER JOIN programs AS p ON p.id = ow.program_id
+             INNER JOIN question_options AS qo ON qo.id = ow.question_option_id
+             INNER JOIN questions AS q ON q.id = qo.question_id
+             LEFT JOIN quiz_version_programs AS qvp
+                ON qvp.program_id = ow.program_id
+               AND qvp.quiz_version_id = q.quiz_version_id
+             LEFT JOIN quiz_version_program_presentations AS qvpp
+                ON qvpp.quiz_version_program_id = qvp.id
              WHERE ow.question_option_id = :question_option_id
              ORDER BY ow.id ASC'
         );
@@ -464,7 +568,7 @@ final class QuizVersionRepository
 
         $weights = [];
         foreach ($weightRows as $weightRow) {
-            $program = $this->rowString($weightRow, 'short_name');
+            $program = $this->rowString($weightRow, 'program_code_snapshot');
             if (!isset($programIds[$program])) {
                 throw new RuntimeException('Persistence invariant violation: weight program is not a version member.');
             }
@@ -514,6 +618,16 @@ final class QuizVersionRepository
     private function rowString(array $row, string $key): string
     {
         if (!array_key_exists($key, $row) || !is_string($row[$key])) {
+            throw new RuntimeException('Invalid persisted quiz version data.');
+        }
+
+        return $row[$key];
+    }
+
+    /** @param array<string, mixed> $row */
+    private function nullableRowString(array $row, string $key): ?string
+    {
+        if (!array_key_exists($key, $row) || ($row[$key] !== null && !is_string($row[$key]))) {
             throw new RuntimeException('Invalid persisted quiz version data.');
         }
 

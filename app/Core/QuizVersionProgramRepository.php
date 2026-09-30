@@ -20,17 +20,18 @@ final class QuizVersionProgramRepository
         }
 
         $statement = $this->connection()->prepare(
-            'SELECT p.id, p.short_name
+            'SELECT p.id, qvpp.program_code_snapshot
              FROM quiz_version_programs AS qvp
+             INNER JOIN quiz_version_program_presentations AS qvpp ON qvpp.quiz_version_program_id = qvp.id
              INNER JOIN programs AS p ON p.id = qvp.program_id
              WHERE qvp.quiz_version_id = :quiz_version_id
-             ORDER BY p.short_name ASC, p.id ASC'
+             ORDER BY qvpp.program_code_snapshot ASC, p.id ASC'
         );
         $statement->execute(['quiz_version_id' => $quizVersionId]);
         $programIds = [];
 
         foreach ($statement->fetchAll() as $row) {
-            $programCode = $this->rowString($row, 'short_name');
+            $programCode = $this->rowString($row, 'program_code_snapshot');
             if (isset($programIds[$programCode])) {
                 throw new RuntimeException('Persistence invariant violation: duplicate quiz version program code.');
             }

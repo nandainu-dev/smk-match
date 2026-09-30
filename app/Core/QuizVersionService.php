@@ -56,7 +56,7 @@ final class QuizVersionService
             throw new RuntimeException('An editable draft already exists for this quiz.');
         }
 
-        return $this->repository->createDraftSnapshot($quizId, $source->definition());
+        return $this->repository->createDraftSnapshot($quizId, $source->definition(), $sourceVersionId);
     }
 
     public function publish(

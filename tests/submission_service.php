@@ -126,8 +126,10 @@ function submissionCreateVersion(PDO $connection, int $quizId, array $programIds
     ]);
     $versionId = (int) $connection->lastInsertId();
     $membership = $connection->prepare('INSERT INTO quiz_version_programs (quiz_version_id, program_id, created_at) VALUES (:version_id, :program_id, UTC_TIMESTAMP())');
+    $presentation = $connection->prepare("INSERT INTO quiz_version_program_presentations (quiz_version_program_id, program_code_snapshot, program_name_snapshot, personality_title_snapshot, mascot_path_snapshot, description_snapshot, skills_snapshot, snapshot_provenance, created_at, updated_at) SELECT :membership_id, short_name, name, personality_title, mascot_path, description, skills_json, 'version_snapshot', UTC_TIMESTAMP(), UTC_TIMESTAMP() FROM programs WHERE id = :program_id");
     foreach ($programIds as $programId) {
         $membership->execute(['version_id' => $versionId, 'program_id' => $programId]);
+        $presentation->execute(['membership_id' => (int) $connection->lastInsertId(), 'program_id' => $programId]);
     }
 
     $questions = [];

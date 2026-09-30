@@ -111,6 +111,8 @@ function createQuizVersionSnapshot(
         "INSERT INTO quiz_version_programs (quiz_version_id, program_id, created_at)
          VALUES ({$versionId}, {$programId}, UTC_TIMESTAMP())"
     );
+    $membershipId = (int) $connection->lastInsertId();
+    $connection->exec("INSERT INTO quiz_version_program_presentations (quiz_version_program_id, program_code_snapshot, program_name_snapshot, personality_title_snapshot, mascot_path_snapshot, description_snapshot, skills_snapshot, snapshot_provenance, created_at, updated_at) SELECT {$membershipId}, short_name, name, personality_title, mascot_path, description, skills_json, 'version_snapshot', UTC_TIMESTAMP(), UTC_TIMESTAMP() FROM programs WHERE id = {$programId}");
     $connection->exec(
         "INSERT INTO questions (quiz_version_id, prompt, sort_order, created_at, updated_at)
          VALUES ({$versionId}, 'Fixture question {$versionId}', 1, UTC_TIMESTAMP(), UTC_TIMESTAMP())"

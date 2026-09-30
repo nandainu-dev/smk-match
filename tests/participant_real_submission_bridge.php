@@ -130,8 +130,10 @@ try {
     $connection->prepare("INSERT INTO quiz_versions (quiz_id, version_number, status, name, published_at, created_at) VALUES (:quiz, 1, 'published', 'R11 Version', UTC_TIMESTAMP(), UTC_TIMESTAMP())")->execute(['quiz' => $quizId]);
     $versionId = (int) $connection->lastInsertId();
     $membership = $connection->prepare('INSERT INTO quiz_version_programs (quiz_version_id, program_id, created_at) VALUES (:version, :program, UTC_TIMESTAMP())');
+    $presentation = $connection->prepare("INSERT INTO quiz_version_program_presentations (quiz_version_program_id, program_code_snapshot, program_name_snapshot, personality_title_snapshot, mascot_path_snapshot, description_snapshot, skills_snapshot, snapshot_provenance, created_at, updated_at) SELECT :membership_id, short_name, name, personality_title, mascot_path, description, skills_json, 'version_snapshot', UTC_TIMESTAMP(), UTC_TIMESTAMP() FROM programs WHERE id = :program_id");
     foreach ($programIds as $programId) {
         $membership->execute(['version' => $versionId, 'program' => $programId]);
+        $presentation->execute(['membership_id' => (int) $connection->lastInsertId(), 'program_id' => $programId]);
     }
     $questionInsert = $connection->prepare('INSERT INTO questions (quiz_version_id, prompt, sort_order, created_at, updated_at) VALUES (:version, :prompt, :order, UTC_TIMESTAMP(), UTC_TIMESTAMP())');
     $optionInsert = $connection->prepare('INSERT INTO question_options (question_id, option_text, sort_order, created_at) VALUES (:question, :text, :order, UTC_TIMESTAMP())');
