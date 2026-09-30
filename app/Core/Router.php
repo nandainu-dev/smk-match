@@ -26,6 +26,15 @@ final class Router
         ];
     }
 
+    /** @param callable(Request, array<string, string>): Response $handler */
+    public function postPattern(string $path, callable $handler): void
+    {
+        $this->parameterRoutes['POST'][] = [
+            'path' => $path,
+            'handler' => $handler,
+        ];
+    }
+
     public function dispatch(Request $request): Response
     {
         $handler = $this->routes[$request->method . ' ' . $request->path] ?? null;
