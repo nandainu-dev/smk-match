@@ -6,6 +6,7 @@ use App\Controllers\PublicParticipantStartController;
 use App\Controllers\PublicParticipantQuizController;
 use App\Controllers\PublicParticipantPlayController;
 use App\Controllers\PublicParticipantSubmitController;
+use App\Controllers\PublicMonitorController;
 use App\Core\AttemptRepository;
 use App\Core\AttemptResponseRepository;
 use App\Controllers\ParticipantQuizController;
@@ -17,6 +18,8 @@ use App\Core\Database;
 use App\Core\ParticipantRepository;
 use App\Core\ParticipantQuizDeliveryService;
 use App\Core\ParticipantStartService;
+use App\Core\MonitorReadRepository;
+use App\Core\MonitorService;
 use App\Core\ProgramProvider;
 use App\Core\QuizProvider;
 use App\Core\QuizVersionRepository;
@@ -96,6 +99,16 @@ return static function (Config $config): Router {
         new SubmissionService($database, new AttemptRepository($database), new AttemptResponseRepository($database), new ResultRepository($database), new ResultScoreRepository($database), new ResultTiedProgramRepository($database), new ParticipantRepository($database), new CampaignRepository($database), new CampaignBatchRepository($database), new QuizVersionRepository($database), new QuizVersionProgramRepository($database), new ScoringEngine()),
         new VisitorIdentityCookie(new UuidV4Generator()),
     );
+    $publicMonitor = new PublicMonitorController(
+        new MonitorService(
+            new SmartLinkService(
+                new SmartLinkRepository($database),
+                new CampaignRepository($database),
+                new CampaignBatchRepository($database),
+            ),
+            new MonitorReadRepository($database),
+        ),
+    );
 
     $router->get('/', static fn (Request $request): Response => $participantQuiz->index());
     $router->get('/result', static fn (Request $request): Response => $participantResult->preview('error'));
@@ -123,6 +136,10 @@ return static function (Config $config): Router {
     $router->getPattern(
         '/api/public/quiz/{attemptUuid}',
         static fn (Request $request, array $parameters): Response => $publicParticipantQuiz->quiz($request, $parameters['attemptUuid']),
+    );
+    $router->getPattern(
+        '/api/public/monitor/{alias}',
+        static fn (Request $request, array $parameters): Response => $publicMonitor->show($request, $parameters['alias']),
     );
     $router->postPattern(
         '/api/public/submit/{attemptUuid}',
