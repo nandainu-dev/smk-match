@@ -8,6 +8,10 @@ use App\Controllers\PublicParticipantPlayController;
 use App\Controllers\PublicParticipantSubmitController;
 use App\Controllers\PublicMonitorController;
 use App\Controllers\PublicMonitorPageController;
+use App\Controllers\AdminAuthController;
+use App\Core\AdminAccessService;
+use App\Core\AdminRepository;
+use App\Core\AdminSession;
 use App\Core\AttemptRepository;
 use App\Core\AttemptResponseRepository;
 use App\Controllers\ParticipantQuizController;
@@ -118,6 +122,11 @@ return static function (Config $config): Router {
             new CampaignBatchRepository($database),
         ),
     );
+    $adminAuth = new AdminAuthController(
+        $config,
+        new AdminAccessService(new AdminRepository($database)),
+        new AdminSession(),
+    );
 
     $router->get('/', static fn (Request $request): Response => $participantQuiz->index());
     $router->get('/result', static fn (Request $request): Response => $participantResult->preview('error'));
@@ -153,6 +162,15 @@ return static function (Config $config): Router {
     $router->getPattern(
         '/monitor/{alias}',
         static fn (Request $request, array $parameters): Response => $publicMonitorPage->show($parameters['alias']),
+    );
+    $router->get('/admin/login', static fn (Request $request): Response => $adminAuth->loginForm($request));
+    $router->postPattern(
+        '/admin/login',
+        static fn (Request $request, array $parameters): Response => $adminAuth->login($request),
+    );
+    $router->postPattern(
+        '/admin/logout',
+        static fn (Request $request, array $parameters): Response => $adminAuth->logout($request),
     );
     $router->postPattern(
         '/api/public/submit/{attemptUuid}',
