@@ -5,7 +5,7 @@ namespace App\Core;
 
 final class Request
 {
-    /** @param array<string, string> $headers @param array<string, string> $cookies */
+    /** @param array<string, string> $headers @param array<string, string> $cookies @param array<string, mixed> $form @param array<string, mixed> $uploads */
     public function __construct(
         public readonly string $method,
         public readonly string $path,
@@ -14,6 +14,8 @@ final class Request
         private readonly array $cookies = [],
         public readonly bool $isHttps = false,
         private readonly array $query = [],
+        private readonly array $form = [],
+        private readonly array $uploads = [],
     ) {
     }
 
@@ -49,6 +51,8 @@ final class Request
             array_filter($_COOKIE, 'is_string'),
             $https,
             self::parseQuery(is_string($query) ? $query : ''),
+            is_array($_POST) ? $_POST : [],
+            is_array($_FILES) ? $_FILES : [],
         );
     }
 
@@ -67,6 +71,40 @@ final class Request
     public function cookie(string $name): ?string
     {
         return $this->cookies[$name] ?? null;
+    }
+
+    /** @return array<string, mixed> */
+    public function formValues(): array
+    {
+        if ($this->form !== []) {
+            return $this->form;
+        }
+
+        $form = [];
+        parse_str($this->body, $form);
+
+        return $form;
+    }
+
+    /** @return array{name: string, tmp_name: string, error: int, size: int}|null */
+    public function upload(string $name): ?array
+    {
+        $upload = $this->uploads[$name] ?? null;
+        if (!is_array($upload)
+            || !isset($upload['name'], $upload['tmp_name'], $upload['error'], $upload['size'])
+            || !is_string($upload['name'])
+            || !is_string($upload['tmp_name'])
+            || !is_int($upload['error'])
+            || !is_int($upload['size'])) {
+            return null;
+        }
+
+        return [
+            'name' => $upload['name'],
+            'tmp_name' => $upload['tmp_name'],
+            'error' => $upload['error'],
+            'size' => $upload['size'],
+        ];
     }
 
     /** @return list<string|null>|null */

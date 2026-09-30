@@ -90,6 +90,8 @@
     };
 
     const optionalValue = (value) => typeof value === 'string' && value.trim() !== '' ? value.trim() : null;
+    const validQuestionImagePath = (value) => typeof value === 'string'
+        && /^\/uploads\/questions\/[a-f0-9]{64}\.(?:jpg|jpeg|png|webp)$/.test(value);
 
     const showError = (message, retry = null, canStartNewSession = false) => {
         state.errorMessage = message;
@@ -105,6 +107,8 @@
         }
         return payload.quiz.questions.every((question) => question && typeof question.id === 'string'
             && typeof question.text === 'string' && Number.isInteger(question.order) && Array.isArray(question.options)
+            && (question.help_text === undefined || typeof question.help_text === 'string')
+            && (question.image_path === undefined || validQuestionImagePath(question.image_path))
             && question.options.every((option) => option && typeof option.id === 'string'
                 && typeof option.text === 'string' && Number.isInteger(option.order)));
     };
@@ -511,6 +515,17 @@
 
         if (isFinal) {
             view.append(element('p', 'pq-final-notice', '🔥 Final round! 🔥'));
+        }
+
+        if (validQuestionImagePath(question.image_path)) {
+            const image = element('img', 'pq-question-image');
+            image.src = question.image_path;
+            image.alt = '';
+            image.loading = 'lazy';
+            view.append(image);
+        }
+        if (typeof question.help_text === 'string' && question.help_text.trim() !== '') {
+            view.append(element('p', 'pq-question-help', question.help_text));
         }
 
         const fieldset = element('fieldset', 'pq-options');

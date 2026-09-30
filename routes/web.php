@@ -9,7 +9,9 @@ use App\Controllers\PublicParticipantSubmitController;
 use App\Controllers\PublicMonitorController;
 use App\Controllers\PublicMonitorPageController;
 use App\Controllers\AdminAuthController;
+use App\Controllers\AdminQuizController;
 use App\Core\AdminAccessService;
+use App\Core\AdminQuizRepository;
 use App\Core\AdminRepository;
 use App\Core\AdminSession;
 use App\Core\AttemptRepository;
@@ -26,9 +28,12 @@ use App\Core\ParticipantStartService;
 use App\Core\MonitorReadRepository;
 use App\Core\MonitorService;
 use App\Core\ProgramProvider;
+use App\Core\QuestionImageStorage;
+use App\Core\QuizAuthoringService;
 use App\Core\QuizProvider;
 use App\Core\QuizVersionRepository;
 use App\Core\QuizVersionProgramRepository;
+use App\Core\QuizVersionService;
 use App\Core\Request;
 use App\Core\Response;
 use App\Core\ResultPresentationFixtureProvider;
@@ -127,6 +132,16 @@ return static function (Config $config): Router {
         new AdminAccessService(new AdminRepository($database)),
         new AdminSession(),
     );
+    $adminQuizVersions = new QuizVersionRepository($database);
+    $adminQuizzes = new AdminQuizController(
+        $config,
+        new AdminSession(),
+        new AdminQuizRepository($database),
+        $adminQuizVersions,
+        new QuizVersionService($adminQuizVersions),
+        new QuizAuthoringService($adminQuizVersions),
+        new QuestionImageStorage(SMK_MATCH_ROOT . '/public'),
+    );
 
     $router->get('/', static fn (Request $request): Response => $participantQuiz->index());
     $router->get('/result', static fn (Request $request): Response => $participantResult->preview('error'));
@@ -164,6 +179,7 @@ return static function (Config $config): Router {
         static fn (Request $request, array $parameters): Response => $publicMonitorPage->show($parameters['alias']),
     );
     $router->get('/admin/login', static fn (Request $request): Response => $adminAuth->loginForm($request));
+    $router->get('/admin', static fn (Request $request): Response => $adminQuizzes->index($request));
     $router->postPattern(
         '/admin/login',
         static fn (Request $request, array $parameters): Response => $adminAuth->login($request),
@@ -171,6 +187,31 @@ return static function (Config $config): Router {
     $router->postPattern(
         '/admin/logout',
         static fn (Request $request, array $parameters): Response => $adminAuth->logout($request),
+    );
+    $router->get('/admin/quizzes', static fn (Request $request): Response => $adminQuizzes->index($request));
+    $router->postPattern(
+        '/admin/quizzes/{quizId}/draft',
+        static fn (Request $request, array $parameters): Response => $adminQuizzes->createDraft($request, $parameters['quizId']),
+    );
+    $router->getPattern(
+        '/admin/quizzes/{quizId}/versions/{versionId}/edit',
+        static fn (Request $request, array $parameters): Response => $adminQuizzes->editor($request, $parameters['quizId'], $parameters['versionId']),
+    );
+    $router->postPattern(
+        '/admin/quizzes/{quizId}/versions/{versionId}/save',
+        static fn (Request $request, array $parameters): Response => $adminQuizzes->save($request, $parameters['quizId'], $parameters['versionId']),
+    );
+    $router->postPattern(
+        '/admin/quizzes/{quizId}/versions/{versionId}/clone',
+        static fn (Request $request, array $parameters): Response => $adminQuizzes->cloneVersion($request, $parameters['quizId'], $parameters['versionId']),
+    );
+    $router->postPattern(
+        '/admin/quizzes/{quizId}/versions/{versionId}/publish',
+        static fn (Request $request, array $parameters): Response => $adminQuizzes->publish($request, $parameters['quizId'], $parameters['versionId']),
+    );
+    $router->postPattern(
+        '/admin/quizzes/{quizId}/versions/{versionId}/discard',
+        static fn (Request $request, array $parameters): Response => $adminQuizzes->discard($request, $parameters['quizId'], $parameters['versionId']),
     );
     $router->postPattern(
         '/api/public/submit/{attemptUuid}',

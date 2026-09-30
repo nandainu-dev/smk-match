@@ -71,6 +71,18 @@ final class QuestionImageStorage
         return '/uploads/questions/' . $filename;
     }
 
+    public function discardNewlyStored(string $publicPath): void
+    {
+        if (preg_match('#\A/uploads/questions/[a-f0-9]{64}\.(?:jpg|png|webp)\z#D', $publicPath) !== 1) {
+            return;
+        }
+
+        $path = $this->questionDirectory() . DIRECTORY_SEPARATOR . basename($publicPath);
+        if (is_file($path)) {
+            @unlink($path);
+        }
+    }
+
     private function questionDirectory(): string
     {
         return rtrim($this->publicDirectory, "\\/")

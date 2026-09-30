@@ -20,7 +20,7 @@ final class ParticipantQuizDeliveryService
     }
 
     /**
-     * @return array{attempt_uuid: string, status: string, quiz: array{name: string, questions: list<array{id: string, text: string, order: int, image_path?: string, options: list<array{id: string, text: string, order: int}>}>}}
+     * @return array{attempt_uuid: string, status: string, quiz: array{name: string, questions: list<array{id: string, text: string, order: int, help_text?: string, image_path?: string, options: list<array{id: string, text: string, order: int}>}>}}
      */
     public function deliver(string $attemptUuid, string $visitorUuid): array
     {
@@ -74,7 +74,7 @@ final class ParticipantQuizDeliveryService
     }
 
     /**
-     * @return array{name: string, questions: list<array{id: string, text: string, order: int, image_path?: string, options: list<array{id: string, text: string, order: int}>}>}
+     * @return array{name: string, questions: list<array{id: string, text: string, order: int, help_text?: string, image_path?: string, options: list<array{id: string, text: string, order: int}>}>}
      */
     private function sanitizeDefinition(QuizDefinition $definition): array
     {
@@ -99,6 +99,10 @@ final class ParticipantQuizDeliveryService
 
             if (isset($question['image_path']) && is_string($question['image_path'])) {
                 $publicQuestion['image_path'] = $question['image_path'];
+            }
+
+            if (isset($question['help_text']) && is_string($question['help_text']) && trim($question['help_text']) !== '') {
+                $publicQuestion['help_text'] = $question['help_text'];
             }
 
             $questions[] = $publicQuestion;

@@ -515,14 +515,15 @@ final class QuizVersionRepository
     private function insertQuestions(PDO $connection, int $versionId, array $questions, array $programIds): void
     {
         $questionStatement = $connection->prepare(
-            'INSERT INTO questions (quiz_version_id, prompt, image_path, sort_order, created_at, updated_at)
-             VALUES (:quiz_version_id, :prompt, :image_path, :sort_order, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
+            'INSERT INTO questions (quiz_version_id, prompt, help_text, image_path, sort_order, created_at, updated_at)
+             VALUES (:quiz_version_id, :prompt, :help_text, :image_path, :sort_order, UTC_TIMESTAMP(), UTC_TIMESTAMP())'
         );
 
         foreach ($questions as $question) {
             $questionStatement->execute([
                 'quiz_version_id' => $versionId,
                 'prompt' => $question['text'],
+                'help_text' => $question['help_text'] ?? null,
                 'image_path' => $question['image_path'] ?? null,
                 'sort_order' => $question['order'],
             ]);
@@ -606,7 +607,7 @@ final class QuizVersionRepository
         $programIds = $this->hydrateProgramIds($versionId);
         $programs = array_fill_keys(array_keys($programIds), true);
         $questionsStatement = $this->connection()->prepare(
-            'SELECT id, prompt, image_path, sort_order
+            'SELECT id, prompt, help_text, image_path, sort_order
              FROM questions
              WHERE quiz_version_id = :quiz_version_id
              ORDER BY sort_order ASC, id ASC'
@@ -622,6 +623,7 @@ final class QuizVersionRepository
             $questions[] = [
                 'id' => 'question-' . $questionId,
                 'text' => $this->rowString($questionRow, 'prompt'),
+                'help_text' => $this->nullableRowString($questionRow, 'help_text'),
                 'image_path' => $this->nullableRowString($questionRow, 'image_path'),
                 'order' => $this->rowInt($questionRow, 'sort_order'),
                 'options' => $options,

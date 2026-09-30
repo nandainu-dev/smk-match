@@ -81,6 +81,12 @@ final class QuizDefinition
             && (!is_string($question['image_path']) || !$this->isSafeQuestionImagePath($question['image_path']))) {
             throw new \InvalidArgumentException('Invalid question image path.');
         }
+
+        if (array_key_exists('help_text', $question)
+            && $question['help_text'] !== null
+            && !is_string($question['help_text'])) {
+            throw new \InvalidArgumentException('Invalid question help text.');
+        }
     }
 
     /** @param array<string, mixed> $option @param array<string, bool> $optionIds @param array<int|string, bool> $optionOrders */
