@@ -11,7 +11,7 @@ final class ResultScore
         public readonly int $programId,
         public readonly float $rawScore,
         public readonly float $normalizedPercentage,
-        public readonly ?int $displayOrder,
+        public readonly int $displayOrder,
         public readonly string $createdAt,
     ) {
         $this->validate();
@@ -27,8 +27,8 @@ final class ResultScore
             throw new \InvalidArgumentException('Result score values must be finite.');
         }
 
-        if ($this->displayOrder !== null && $this->displayOrder < 1) {
-            throw new \InvalidArgumentException('Result score display order must be positive when present.');
+        if ($this->displayOrder < 1) {
+            throw new \InvalidArgumentException('Result score display order must be positive.');
         }
 
         if (trim($this->createdAt) === '') {

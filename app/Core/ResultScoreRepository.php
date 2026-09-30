@@ -20,13 +20,13 @@ final class ResultScoreRepository
         float $rawScore,
         float $normalizedPercentage,
         DateTimeImmutable $createdAt,
-        ?int $displayOrder = null,
+        int $displayOrder,
     ): ResultScore {
         $this->assertPositiveId($resultId, 'Result score result identity');
         $this->assertPositiveId($programId, 'Result score program identity');
         $this->assertFinite($rawScore, 'Result score raw score');
         $this->assertFinite($normalizedPercentage, 'Result score normalized percentage');
-        $this->assertNullablePositiveId($displayOrder, 'Result score display order');
+        $this->assertPositiveId($displayOrder, 'Result score display order');
 
         $statement = $this->connection()->prepare(
             'INSERT INTO result_scores (
@@ -110,13 +110,6 @@ final class ResultScoreRepository
         }
     }
 
-    private function assertNullablePositiveId(?int $value, string $label): void
-    {
-        if ($value !== null && $value < 1) {
-            throw new \InvalidArgumentException($label . ' must be positive when present.');
-        }
-    }
-
     private function assertFinite(float $value, string $label): void
     {
         if (!is_finite($value)) {
@@ -138,7 +131,7 @@ final class ResultScoreRepository
             $this->rowInt($row, 'program_id'),
             $this->rowFloat($row, 'raw_score'),
             $this->rowFloat($row, 'normalized_percentage'),
-            $this->nullablePositiveRowInt($row, 'display_order'),
+            $this->positiveRowInt($row, 'display_order'),
             $this->rowString($row, 'created_at'),
         );
     }
@@ -164,22 +157,14 @@ final class ResultScoreRepository
     }
 
     /** @param array<string, mixed> $row */
-    private function nullablePositiveRowInt(array $row, string $key): ?int
+    private function positiveRowInt(array $row, string $key): int
     {
-        if (!array_key_exists($key, $row)) {
+        $value = $this->rowInt($row, $key);
+        if ($value < 1) {
             throw new RuntimeException('Invalid persisted result score data.');
         }
 
-        if ($row[$key] === null) {
-            return null;
-        }
-
-        if ((is_int($row[$key]) && $row[$key] >= 1)
-            || (is_string($row[$key]) && ctype_digit($row[$key]) && (int) $row[$key] >= 1)) {
-            return (int) $row[$key];
-        }
-
-        throw new RuntimeException('Invalid persisted result score data.');
+        return $value;
     }
 
     /** @param array<string, mixed> $row */

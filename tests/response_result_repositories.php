@@ -360,9 +360,9 @@ try {
 
     $scoreInputs = [
         'DELTA' => [4.25, 12.5, 2],
-        'ALPHA' => [13.333333333333, 33.33, null],
+        'ALPHA' => [13.333333333333, 33.33, 3],
         'GAMMA' => [-2.5, -6.25, 1],
-        'BETA' => [25.0, 62.5, null],
+        'BETA' => [25.0, 62.5, 4],
     ];
     foreach ($scoreInputs as $programCode => [$rawScore, $percentage, $displayOrder]) {
         $scores->create(
@@ -384,8 +384,8 @@ try {
     responseResultAssert(
         count($storedScores) === 4
         && array_map(static fn($score): int => $score->programId, $storedScores) === $expectedProgramOrder
-        && array_map(static fn($score): ?int => $score->displayOrder, $storedScores) === [1, 2, null, null],
-        'Result score display order or nullable legacy fallback ordering is invalid.',
+        && array_map(static fn($score): int => $score->displayOrder, $storedScores) === [1, 2, 3, 4],
+        'Result score display order is invalid.',
     );
     $alphaScore = array_values(array_filter(
         $storedScores,
@@ -394,19 +394,19 @@ try {
     responseResultAssert(
         abs($alphaScore->rawScore - 13.333333333333) < 0.000000000001
         && abs($alphaScore->normalizedPercentage - 33.33) < 0.000000000001
-        && $alphaScore->displayOrder === null,
-        'Result score precision or nullable display order was not preserved by the repository.',
+        && $alphaScore->displayOrder === 3,
+        'Result score precision or display order was not preserved by the repository.',
     );
     responseResultDatabaseRejected(
-        fn() => $scores->create($nonTieResult->id, $programIds['ALPHA'], 1.0, 1.0, $createdAt),
+        fn() => $scores->create($nonTieResult->id, $programIds['ALPHA'], 1.0, 1.0, $createdAt, 1),
         'Duplicate result score was accepted.',
     );
     responseResultDatabaseRejected(
-        fn() => $scores->create(999999, $programIds['ALPHA'], 1.0, 1.0, $createdAt),
+        fn() => $scores->create(999999, $programIds['ALPHA'], 1.0, 1.0, $createdAt, 1),
         'Invalid result score result foreign key was accepted.',
     );
     responseResultDatabaseRejected(
-        fn() => $scores->create($nonTieResult->id, 999999, 1.0, 1.0, $createdAt),
+        fn() => $scores->create($nonTieResult->id, 999999, 1.0, 1.0, $createdAt, 1),
         'Invalid result score program foreign key was accepted.',
     );
 
@@ -455,11 +455,11 @@ try {
         'Non-finite result total was accepted.',
     );
     responseResultInvalid(
-        fn() => $scores->create($nonTieResult->id, $programIds['ALPHA'], INF, 1.0, $createdAt),
+        fn() => $scores->create($nonTieResult->id, $programIds['ALPHA'], INF, 1.0, $createdAt, 1),
         'Non-finite raw score was accepted.',
     );
     responseResultInvalid(
-        fn() => $scores->create($nonTieResult->id, $programIds['ALPHA'], 1.0, -INF, $createdAt),
+        fn() => $scores->create($nonTieResult->id, $programIds['ALPHA'], 1.0, -INF, $createdAt, 1),
         'Non-finite percentage was accepted.',
     );
     responseResultInvalid(
@@ -492,7 +492,7 @@ try {
             false,
             $createdAt,
         );
-        $scores->create($transactionResult->id, $programIds['ALPHA'], 1.0, 100.0, $createdAt);
+        $scores->create($transactionResult->id, $programIds['ALPHA'], 1.0, 100.0, $createdAt, 1);
         responseResultAssert($connection->inTransaction(), 'Repository committed the caller transaction.');
     } finally {
         if ($connection->inTransaction()) {
