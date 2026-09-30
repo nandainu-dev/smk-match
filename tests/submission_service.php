@@ -264,12 +264,12 @@ try {
     $resultRepository = new ResultRepository($database);
     $responseRepository = new AttemptResponseRepository($database);
 
-    $nonTieAnswers = submissionAnswers($fixture, 1, 1);
+    $nonTieAnswers = submissionAnswers($fixture, 2, 1);
     [$nonTieAttempt] = submissionCreateAttempt($database, $fixture, '000000000001', $nonTieAnswers);
     $directDefinition = $quizVersions->findById($fixture['version']['id'])?->definition();
     submissionAssert($directDefinition !== null, 'Published snapshot could not hydrate.');
     $directG6 = (new ScoringEngine())->score($directDefinition, [
-        ['question_id' => 'question-' . $fixture['version']['questions'][1]['id'], 'option_id' => 'option-' . $fixture['version']['questions'][1]['options'][1]],
+        ['question_id' => 'question-' . $fixture['version']['questions'][1]['id'], 'option_id' => 'option-' . $fixture['version']['questions'][1]['options'][2]],
         ['question_id' => 'question-' . $fixture['version']['questions'][2]['id'], 'option_id' => 'option-' . $fixture['version']['questions'][2]['options'][1]],
     ]);
     $outcome = $service->submit($nonTieAttempt->attemptUuid, $nonTieAnswers, $fixture['timestamp']);
@@ -288,15 +288,34 @@ try {
         $programCode = array_search($score->programId, $fixture['program_ids'], true);
         submissionAssert($programCode !== false && $score->rawScore === $directG6['raw_scores'][$programCode] && $score->normalizedPercentage === $directG6['percentages'][$programCode], 'Persisted score differs from direct G6 output.');
     }
+    submissionAssert(
+        array_map(static fn($score): string => (string) array_search($score->programId, $fixture['program_ids'], true), $outcome->scores) === array_column($directG6['ranking'], 'program')
+        && array_map(static fn($score): ?int => $score->displayOrder, $outcome->scores) === [1, 2, 3, 4],
+        'Non-tie result scores did not persist the exact one-based G6 ranking sequence.',
+    );
+    $beforeRetryScoreOrder = array_map(static fn($score): array => [$score->programId, $score->displayOrder], $outcome->scores);
     $beforeRetry = [submissionCount($connection, 'responses', $nonTieAttempt->id), submissionCount($connection, 'results', $nonTieAttempt->id), submissionCount($connection, 'result_scores', $nonTieAttempt->id), submissionCount($connection, 'result_tied_programs', $nonTieAttempt->id), $completedAttempt->submittedAt];
     $retry = $service->submit($nonTieAttempt->attemptUuid, submissionAnswers($fixture, 2, 2), new DateTimeImmutable('2026-03-10 00:00:00', new DateTimeZone('UTC')));
     $afterRetry = [submissionCount($connection, 'responses', $nonTieAttempt->id), submissionCount($connection, 'results', $nonTieAttempt->id), submissionCount($connection, 'result_scores', $nonTieAttempt->id), submissionCount($connection, 'result_tied_programs', $nonTieAttempt->id), (new AttemptRepository($database))->findById($nonTieAttempt->id)?->submittedAt];
-    submissionAssert($retry->alreadyCompleted && $retry->result->id === $outcome->result->id && $beforeRetry === $afterRetry, 'Completed retry changed persisted state.');
+    submissionAssert($retry->alreadyCompleted && $retry->result->id === $outcome->result->id && $beforeRetry === $afterRetry && array_map(static fn($score): array => [$score->programId, $score->displayOrder], $retry->scores) === $beforeRetryScoreOrder, 'Completed retry changed persisted state or display ordering.');
 
     $tieAnswers = submissionAnswers($fixture, 2, 2);
     [$tieAttempt] = submissionCreateAttempt($database, $fixture, '000000000002', $tieAnswers);
     $tieOutcome = $service->submit($tieAttempt->attemptUuid, $tieAnswers, $fixture['timestamp']);
-    submissionAssert(!$tieOutcome->alreadyCompleted && $tieOutcome->result->isTie && $tieOutcome->result->dominantProgramId === null && count($tieOutcome->tiedProgramIds) === 2 && count($tieOutcome->scores) === 4, 'Tie submission did not preserve the G6 tie contract.');
+    $tieG6 = (new ScoringEngine())->score($directDefinition, [
+        ['question_id' => 'question-' . $fixture['version']['questions'][1]['id'], 'option_id' => 'option-' . $fixture['version']['questions'][1]['options'][2]],
+        ['question_id' => 'question-' . $fixture['version']['questions'][2]['id'], 'option_id' => 'option-' . $fixture['version']['questions'][2]['options'][2]],
+    ]);
+    submissionAssert(
+        !$tieOutcome->alreadyCompleted
+        && $tieOutcome->result->isTie
+        && $tieOutcome->result->dominantProgramId === null
+        && count($tieOutcome->tiedProgramIds) === 2
+        && count($tieOutcome->scores) === 4
+        && array_map(static fn($score): string => (string) array_search($score->programId, $fixture['program_ids'], true), $tieOutcome->scores) === array_column($tieG6['ranking'], 'program')
+        && array_map(static fn($score): ?int => $score->displayOrder, $tieOutcome->scores) === [1, 2, 3, 4],
+        'Tie submission did not preserve sequential positions from the deterministic G6 ranking.',
+    );
 
     submissionRejected(fn() => $service->submit('64000000-0000-4000-8000-999999999999', $nonTieAnswers, $fixture['timestamp']), 'Unknown attempt was accepted.');
     $connection->prepare('INSERT INTO attempts (quiz_version_id, visitor_uuid, attempt_uuid, source, status, submitted_at, created_at) VALUES (:version, :visitor, :attempt, NULL, :status, NULL, :created_at)')->execute([

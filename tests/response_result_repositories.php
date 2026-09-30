@@ -359,27 +359,33 @@ try {
     );
 
     $scoreInputs = [
-        'DELTA' => [4.25, 12.5],
-        'ALPHA' => [13.333333333333, 33.33],
-        'GAMMA' => [-2.5, -6.25],
-        'BETA' => [25.0, 62.5],
+        'DELTA' => [4.25, 12.5, 2],
+        'ALPHA' => [13.333333333333, 33.33, null],
+        'GAMMA' => [-2.5, -6.25, 1],
+        'BETA' => [25.0, 62.5, null],
     ];
-    foreach ($scoreInputs as $programCode => [$rawScore, $percentage]) {
+    foreach ($scoreInputs as $programCode => [$rawScore, $percentage, $displayOrder]) {
         $scores->create(
             $nonTieResult->id,
             $programIds[$programCode],
             $rawScore,
             $percentage,
             $createdAt,
+            $displayOrder,
         );
     }
     $storedScores = $scores->findScoresByResultId($nonTieResult->id);
-    $expectedProgramOrder = array_values($programIds);
-    sort($expectedProgramOrder, SORT_NUMERIC);
+    $expectedProgramOrder = [
+        $programIds['GAMMA'],
+        $programIds['DELTA'],
+        $programIds['ALPHA'],
+        $programIds['BETA'],
+    ];
     responseResultAssert(
         count($storedScores) === 4
-        && array_map(static fn($score): int => $score->programId, $storedScores) === $expectedProgramOrder,
-        'N-program result scores were not preserved in deterministic program identity order.',
+        && array_map(static fn($score): int => $score->programId, $storedScores) === $expectedProgramOrder
+        && array_map(static fn($score): ?int => $score->displayOrder, $storedScores) === [1, 2, null, null],
+        'Result score display order or nullable legacy fallback ordering is invalid.',
     );
     $alphaScore = array_values(array_filter(
         $storedScores,
@@ -387,8 +393,9 @@ try {
     ))[0];
     responseResultAssert(
         abs($alphaScore->rawScore - 13.333333333333) < 0.000000000001
-        && abs($alphaScore->normalizedPercentage - 33.33) < 0.000000000001,
-        'Result score precision was rounded by the repository.',
+        && abs($alphaScore->normalizedPercentage - 33.33) < 0.000000000001
+        && $alphaScore->displayOrder === null,
+        'Result score precision or nullable display order was not preserved by the repository.',
     );
     responseResultDatabaseRejected(
         fn() => $scores->create($nonTieResult->id, $programIds['ALPHA'], 1.0, 1.0, $createdAt),
@@ -454,6 +461,10 @@ try {
     responseResultInvalid(
         fn() => $scores->create($nonTieResult->id, $programIds['ALPHA'], 1.0, -INF, $createdAt),
         'Non-finite percentage was accepted.',
+    );
+    responseResultInvalid(
+        fn() => $scores->create($nonTieResult->id, $programIds['ALPHA'], 1.0, 1.0, $createdAt, 0),
+        'Non-positive display order was accepted.',
     );
 
     $connection->beginTransaction();

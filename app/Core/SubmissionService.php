@@ -90,13 +90,15 @@ final class SubmissionService
                 $submittedAt,
             );
 
-            foreach ($programIds as $programCode => $programId) {
+            foreach ($this->rankingRows($scoringResult) as $rankingIndex => $rankingRow) {
+                $programCode = $rankingRow['program'];
                 $this->scores->create(
                     $result->id,
-                    $programId,
-                    $this->scoreValue($scoringResult, 'raw_scores', $programCode),
-                    $this->scoreValue($scoringResult, 'percentages', $programCode),
+                    $programIds[$programCode],
+                    $rankingRow['raw_score'],
+                    $rankingRow['percentage'],
                     $submittedAt,
+                    $rankingIndex + 1,
                 );
             }
 
@@ -148,6 +150,7 @@ final class SubmissionService
         }
 
         $scoreProgramIds = array_map(static fn(ResultScore $score): int => $score->programId, $scores);
+        sort($scoreProgramIds, SORT_NUMERIC);
         if ($scoreProgramIds !== $expectedProgramIds) {
             throw new RuntimeException('Persistence invariant violation: completed result scores do not match version programs.');
         }
@@ -281,6 +284,23 @@ final class SubmissionService
             $this->scoreValue($scoringResult, 'percentages', $programCode);
         }
 
+        $ranking = $this->rankingRows($scoringResult);
+        if (count($ranking) !== count($programIds)) {
+            throw new RuntimeException('Scoring output ranking does not match quiz version membership.');
+        }
+
+        $rankedPrograms = [];
+        foreach ($ranking as $rankingRow) {
+            $programCode = $rankingRow['program'];
+            if (!isset($programIds[$programCode]) || isset($rankedPrograms[$programCode])
+                || $rankingRow['raw_score'] !== $this->scoreValue($scoringResult, 'raw_scores', $programCode)
+                || $rankingRow['percentage'] !== $this->scoreValue($scoringResult, 'percentages', $programCode)) {
+                throw new RuntimeException('Scoring output ranking does not match quiz version membership.');
+            }
+
+            $rankedPrograms[$programCode] = true;
+        }
+
         $isTie = $this->boolResultValue($scoringResult, 'is_tie');
         $dominantProgram = $scoringResult['dominant_program'] ?? null;
         $tiedPrograms = $scoringResult['tied_programs'] ?? null;
@@ -338,6 +358,36 @@ final class SubmissionService
         }
 
         return $scoringResult[$key][$programCode];
+    }
+
+    /** @param array<string, mixed> $scoringResult @return list<array{program: string, raw_score: float, percentage: float}> */
+    private function rankingRows(array $scoringResult): array
+    {
+        $ranking = $scoringResult['ranking'] ?? null;
+        if (!is_array($ranking)) {
+            throw new RuntimeException('Scoring output ranking is invalid.');
+        }
+
+        $rows = [];
+        foreach ($ranking as $rankingRow) {
+            if (!is_array($rankingRow)
+                || !isset($rankingRow['program'], $rankingRow['raw_score'], $rankingRow['percentage'])
+                || !is_string($rankingRow['program'])
+                || !is_float($rankingRow['raw_score'])
+                || !is_float($rankingRow['percentage'])
+                || !is_finite($rankingRow['raw_score'])
+                || !is_finite($rankingRow['percentage'])) {
+                throw new RuntimeException('Scoring output ranking is invalid.');
+            }
+
+            $rows[] = [
+                'program' => $rankingRow['program'],
+                'raw_score' => $rankingRow['raw_score'],
+                'percentage' => $rankingRow['percentage'],
+            ];
+        }
+
+        return $rows;
     }
 
     private function databaseId(mixed $identifier, string $prefix): int
