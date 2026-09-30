@@ -5,7 +5,9 @@ use App\Controllers\PublicCampaignEntryController;
 use App\Controllers\PublicParticipantStartController;
 use App\Controllers\PublicParticipantQuizController;
 use App\Controllers\PublicParticipantPlayController;
+use App\Controllers\PublicParticipantSubmitController;
 use App\Core\AttemptRepository;
+use App\Core\AttemptResponseRepository;
 use App\Controllers\ParticipantQuizController;
 use App\Controllers\ParticipantResultController;
 use App\Core\CampaignBatchRepository;
@@ -18,12 +20,18 @@ use App\Core\ParticipantStartService;
 use App\Core\ProgramProvider;
 use App\Core\QuizProvider;
 use App\Core\QuizVersionRepository;
+use App\Core\QuizVersionProgramRepository;
 use App\Core\Request;
 use App\Core\Response;
 use App\Core\ResultPresentationFixtureProvider;
+use App\Core\ResultRepository;
+use App\Core\ResultScoreRepository;
+use App\Core\ResultTiedProgramRepository;
 use App\Core\Router;
+use App\Core\ScoringEngine;
 use App\Core\SmartLinkRepository;
 use App\Core\SmartLinkService;
+use App\Core\SubmissionService;
 use App\Core\UuidV4Generator;
 use App\Core\VisitorIdentityCookie;
 
@@ -83,6 +91,11 @@ return static function (Config $config): Router {
             new CampaignBatchRepository($database),
         ),
     );
+    $publicParticipantSubmit = new PublicParticipantSubmitController(
+        new AttemptRepository($database),
+        new SubmissionService($database, new AttemptRepository($database), new AttemptResponseRepository($database), new ResultRepository($database), new ResultScoreRepository($database), new ResultTiedProgramRepository($database), new ParticipantRepository($database), new CampaignRepository($database), new CampaignBatchRepository($database), new QuizVersionRepository($database), new QuizVersionProgramRepository($database), new ScoringEngine()),
+        new VisitorIdentityCookie(new UuidV4Generator()),
+    );
 
     $router->get('/', static fn (Request $request): Response => $participantQuiz->index());
     $router->get('/result', static fn (Request $request): Response => $participantResult->preview('error'));
@@ -110,6 +123,10 @@ return static function (Config $config): Router {
     $router->getPattern(
         '/api/public/quiz/{attemptUuid}',
         static fn (Request $request, array $parameters): Response => $publicParticipantQuiz->quiz($request, $parameters['attemptUuid']),
+    );
+    $router->postPattern(
+        '/api/public/submit/{attemptUuid}',
+        static fn (Request $request, array $parameters): Response => $publicParticipantSubmit->submit($request, $parameters['attemptUuid']),
     );
     $router->get('/health', static fn (Request $request): Response => Response::json([
         'status' => 'ok',
