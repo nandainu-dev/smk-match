@@ -326,7 +326,7 @@ try {
         'Expected-state mismatch changed the persisted status.',
     );
     repositoryAssert($repository->hasPersistedUsage($created->id) === false, 'Usage is unexpectedly present.');
-    $fixturePdo->prepare('INSERT INTO attempts (quiz_version_id, visitor_uuid, attempt_uuid, created_at) VALUES (:version, :visitor, :attempt, UTC_TIMESTAMP())')->execute(['version' => $created->id, 'visitor' => '33333333-3333-3333-3333-333333333333', 'attempt' => '44444444-4444-4444-4444-444444444444']);
+    $fixturePdo->prepare('INSERT INTO attempts (quiz_version_id, visitor_uuid, attempt_uuid, status, created_at) VALUES (:version, :visitor, :attempt, :status, UTC_TIMESTAMP())')->execute(['version' => $created->id, 'visitor' => '33333333-3333-3333-3333-333333333333', 'attempt' => '44444444-4444-4444-4444-444444444444', 'status' => 'started']);
     repositoryAssert($repository->hasPersistedUsage($created->id) === true, 'Persisted usage was not detected.');
     echo "Quiz version repository integration tests passed.\n";
 } finally {

@@ -114,13 +114,14 @@ function createQuiz(PDO $connection, int $schoolId, string $name): int
 function insertAttempt(PDO $connection, int $versionId, int $sequence): void
 {
     $statement = $connection->prepare(
-        'INSERT INTO attempts (quiz_version_id, visitor_uuid, attempt_uuid, created_at)
-         VALUES (:quiz_version_id, :visitor_uuid, :attempt_uuid, UTC_TIMESTAMP())'
+        'INSERT INTO attempts (quiz_version_id, visitor_uuid, attempt_uuid, status, created_at)
+         VALUES (:quiz_version_id, :visitor_uuid, :attempt_uuid, :status, UTC_TIMESTAMP())'
     );
     $statement->execute([
         'quiz_version_id' => $versionId,
         'visitor_uuid' => sprintf('%08d-0000-4000-8000-%012d', $sequence, $sequence),
         'attempt_uuid' => sprintf('%08d-0000-4000-9000-%012d', $sequence, $sequence),
+        'status' => 'started',
     ]);
 }
 
