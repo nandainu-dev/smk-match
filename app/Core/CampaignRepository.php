@@ -50,6 +50,33 @@ final class CampaignRepository
         return $statement->rowCount() === 1;
     }
 
+    public function updateStatus(
+        int $campaignId,
+        string $expectedCurrentStatus,
+        string $newStatus,
+    ): bool {
+        $this->assertPositiveId($campaignId, 'Campaign identity');
+
+        if (trim($expectedCurrentStatus) === '' || trim($newStatus) === '') {
+            throw new \InvalidArgumentException('Campaign statuses must not be blank.');
+        }
+
+        $statement = $this->connection()->prepare(
+            'UPDATE campaigns
+             SET status = :new_status,
+                 updated_at = UTC_TIMESTAMP()
+             WHERE id = :id
+               AND status = :expected_status'
+        );
+        $statement->execute([
+            'id' => $campaignId,
+            'expected_status' => $expectedCurrentStatus,
+            'new_status' => $newStatus,
+        ]);
+
+        return $statement->rowCount() === 1;
+    }
+
     private function find(int $campaignId, bool $forUpdate): ?Campaign
     {
         $sql =

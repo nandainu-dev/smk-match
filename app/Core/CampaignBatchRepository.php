@@ -191,9 +191,13 @@ final class CampaignBatchRepository
 
         $statement = $this->connection()->prepare($sql);
         $statement->execute(['campaign_id' => $campaignId]);
-        $row = $statement->fetch();
+        $rows = $statement->fetchAll();
 
-        return $row === false ? null : $this->hydrate($row);
+        if (count($rows) > 1) {
+            throw new RuntimeException('Persistence invariant violation: multiple active campaign batches exist.');
+        }
+
+        return $rows === [] ? null : $this->hydrate($rows[0]);
     }
 
     private function connection(): PDO
