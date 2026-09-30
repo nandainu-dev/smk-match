@@ -8,15 +8,17 @@
         return;
     }
 
-    let quiz;
+    let config;
     try {
-        quiz = JSON.parse(dataElement.textContent || '{}');
+        config = JSON.parse(dataElement.textContent || '{}');
     } catch (error) {
         root.textContent = 'Kuis belum dapat dimuat. Silakan muat ulang halaman ini.';
         return;
     }
 
-    const questions = Array.isArray(quiz.questions) ? quiz.questions : [];
+    const realMode = config.mode === 'real';
+    const alias = typeof config.alias === 'string' ? config.alias : '';
+    let questions = realMode ? [] : (Array.isArray(config.questions) ? config.questions : []);
     const state = {
         screen: 'LANDING',
         identity: {
@@ -28,9 +30,163 @@
         },
         answers: {},
         currentIndex: 0,
+        attemptUuid: null,
+        errorMessage: '',
+        retry: null,
+        canStartNewSession: false,
     };
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     let analysisTimer = null;
+
+    const isUuidV4 = (value) => typeof value === 'string'
+        && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+
+    const storageKey = () => `smk_match_attempt:${alias}`;
+
+    const storedAttemptUuid = () => {
+        try {
+            const value = window.sessionStorage.getItem(storageKey());
+            if (value !== null && !isUuidV4(value)) {
+                window.sessionStorage.removeItem(storageKey());
+                return null;
+            }
+            return value;
+        } catch (error) {
+            return null;
+        }
+    };
+
+    const rememberAttemptUuid = (attemptUuid) => {
+        try {
+            window.sessionStorage.setItem(storageKey(), attemptUuid);
+        } catch (error) {
+            // The current in-memory attempt UUID remains usable.
+        }
+    };
+
+    const forgetAttemptUuid = () => {
+        try {
+            window.sessionStorage.removeItem(storageKey());
+        } catch (error) {
+            // Storage can be unavailable without preventing a new in-memory session.
+        }
+    };
+
+    const generateUuidV4 = () => {
+        if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+            return window.crypto.randomUUID();
+        }
+        if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
+            const bytes = new Uint8Array(16);
+            window.crypto.getRandomValues(bytes);
+            bytes[6] = (bytes[6] & 0x0f) | 0x40;
+            bytes[8] = (bytes[8] & 0x3f) | 0x80;
+            const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+            return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+        }
+        return null;
+    };
+
+    const optionalValue = (value) => typeof value === 'string' && value.trim() !== '' ? value.trim() : null;
+
+    const showError = (message, retry = null, canStartNewSession = false) => {
+        state.errorMessage = message;
+        state.retry = retry;
+        state.canStartNewSession = canStartNewSession;
+        setState('ERROR');
+    };
+
+    const validQuiz = (payload, attemptUuid) => {
+        if (!payload || payload.ok !== true || payload.attempt_uuid !== attemptUuid || payload.status !== 'started'
+            || !payload.quiz || typeof payload.quiz.name !== 'string' || !Array.isArray(payload.quiz.questions)) {
+            return false;
+        }
+        return payload.quiz.questions.every((question) => question && typeof question.id === 'string'
+            && typeof question.text === 'string' && Number.isInteger(question.order) && Array.isArray(question.options)
+            && question.options.every((option) => option && typeof option.id === 'string'
+                && typeof option.text === 'string' && Number.isInteger(option.order)));
+    };
+
+    const loadRealQuiz = async (attemptUuid) => {
+        setState('LOADING_QUIZ');
+        try {
+            const response = await fetch(`/api/public/quiz/${encodeURIComponent(attemptUuid)}`, { credentials: 'same-origin' });
+            let payload = null;
+            try {
+                payload = await response.json();
+            } catch (error) {
+                // A malformed response is handled as a safe temporary failure.
+            }
+            if (response.status === 409 && payload && payload.error === 'attempt_completed') {
+                showError('Sesi ini sudah selesai.');
+                return;
+            }
+            if (response.status === 404) {
+                showError('Sesi kuis tidak tersedia. Silakan mulai kembali dari link yang diberikan.');
+                return;
+            }
+            if (response.status !== 200 || !validQuiz(payload, attemptUuid)) {
+                showError('Terjadi gangguan sementara. Silakan coba lagi.', () => loadRealQuiz(attemptUuid));
+                return;
+            }
+            questions = payload.quiz.questions;
+            state.answers = {};
+            state.currentIndex = 0;
+            setState('INTRO');
+        } catch (error) {
+            showError('Terjadi gangguan sementara. Silakan coba lagi.', () => loadRealQuiz(attemptUuid));
+        }
+    };
+
+    const startRealQuiz = async () => {
+        const attemptUuid = state.attemptUuid || storedAttemptUuid() || generateUuidV4();
+        if (!isUuidV4(attemptUuid)) {
+            showError('Browser ini belum mendukung pembuatan sesi yang aman.');
+            return;
+        }
+        state.attemptUuid = attemptUuid;
+        rememberAttemptUuid(attemptUuid);
+        setState('STARTING');
+        try {
+            const response = await fetch(`/api/public/start/${encodeURIComponent(alias)}`, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Idempotency-Key': attemptUuid,
+                },
+                body: JSON.stringify({
+                    full_name: state.identity.fullName.trim(),
+                    origin_school: optionalValue(state.identity.originSchool),
+                    class_name: optionalValue(state.identity.className),
+                    phone: optionalValue(state.identity.whatsapp),
+                    marketing_consent: state.identity.marketingConsent,
+                }),
+            });
+            let payload = null;
+            try {
+                payload = await response.json();
+            } catch (error) {
+                // The status-specific safe messages below do not require a body.
+            }
+            if ((response.status === 201 || response.status === 200) && payload && payload.ok === true
+                && isUuidV4(payload.attempt_uuid) && payload.attempt_uuid === attemptUuid) {
+                await loadRealQuiz(attemptUuid);
+                return;
+            }
+            if (response.status === 404) {
+                showError('Link kuis tidak tersedia atau sudah tidak aktif.');
+            } else if (response.status === 409 && payload && payload.error === 'idempotency_conflict') {
+                showError('Sesi ini tidak cocok dengan perangkat atau link yang digunakan.', null, true);
+            } else if (response.status === 400 || response.status === 415 || response.status === 422) {
+                showError('Data belum dapat diproses. Periksa kembali data yang diisi.');
+            } else {
+                showError('Terjadi gangguan sementara. Silakan coba lagi.', startRealQuiz);
+            }
+        } catch (error) {
+            showError('Terjadi gangguan sementara. Silakan coba lagi.', startRealQuiz);
+        }
+    };
 
     const element = (tagName, className, text) => {
         const node = document.createElement(tagName);
@@ -72,7 +228,7 @@
         const view = screen('pq-screen--centered');
         addDoodles(view);
 
-        view.append(element('span', 'pq-kicker pq-kicker--lime', `${questions.length} soal`));
+        view.append(element('span', 'pq-kicker pq-kicker--lime', realMode ? 'Kuis pilihanmu' : `${questions.length} soal`));
 
         const heading = element('h1', 'pq-heading');
         heading.append('Jurusan apa yang ');
@@ -157,7 +313,9 @@
 
         form.addEventListener('submit', (event) => {
             event.preventDefault();
-            const fields = [
+            const fields = realMode ? [
+                ['fullName', 'full-name', 'Nama perlu diisi.'],
+            ] : [
                 ['fullName', 'full-name', 'Nama perlu diisi.'],
                 ['originSchool', 'origin-school', 'Asal sekolah perlu diisi.'],
                 ['className', 'class-name', 'Kelas perlu diisi.'],
@@ -177,6 +335,10 @@
             });
             if (firstInvalid) {
                 firstInvalid.focus();
+                return;
+            }
+            if (realMode) {
+                startRealQuiz();
                 return;
             }
             setState('INTRO');
@@ -295,7 +457,7 @@
             state.currentIndex -= 1;
             render();
         });
-        const next = button(isFinal ? 'Lihat Hasil ✦' : 'Lanjut →');
+        const next = button(isFinal ? (realMode ? 'Selesai ✦' : 'Lihat Hasil ✦') : 'Lanjut →');
         next.disabled = !state.answers[question.id];
         next.addEventListener('click', () => {
             if (!state.answers[question.id]) {
@@ -349,6 +511,37 @@
         return view;
     };
 
+    const renderLoading = (copy) => {
+        const view = screen('pq-screen--centered pq-analyzing');
+        view.append(element('h1', 'pq-heading pq-heading--compact', copy));
+        const loader = element('div', 'pq-loader');
+        loader.setAttribute('role', 'status');
+        loader.append(element('span', 'pq-loader__inner', '✦'));
+        view.append(loader);
+        return view;
+    };
+
+    const renderError = () => {
+        const view = screen('pq-screen--centered');
+        view.append(element('h1', 'pq-heading pq-heading--compact', 'Belum bisa dilanjutkan'));
+        view.append(element('p', 'pq-copy', state.errorMessage));
+        if (state.retry) {
+            const retry = button('Coba lagi');
+            retry.addEventListener('click', () => state.retry());
+            view.append(retry);
+        }
+        if (state.canStartNewSession) {
+            const restart = button('Mulai sesi baru', 'pq-button pq-button--secondary');
+            restart.addEventListener('click', () => {
+                forgetAttemptUuid();
+                state.attemptUuid = null;
+                setState('IDENTITY');
+            });
+            view.append(restart);
+        }
+        return view;
+    };
+
     const render = () => {
         root.replaceChildren();
         root.dataset.state = state.screen;
@@ -359,6 +552,9 @@
             QUESTION: renderQuestion,
             ANALYZING: renderAnalyzing,
             RESULT_HANDOFF: renderHandoff,
+            STARTING: () => renderLoading('Menyiapkan sesi...'),
+            LOADING_QUIZ: () => renderLoading('Memuat kuis...'),
+            ERROR: renderError,
         };
         root.append((views[state.screen] || renderLanding)());
     };

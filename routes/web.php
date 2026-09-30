@@ -4,6 +4,7 @@ declare(strict_types=1);
 use App\Controllers\PublicCampaignEntryController;
 use App\Controllers\PublicParticipantStartController;
 use App\Controllers\PublicParticipantQuizController;
+use App\Controllers\PublicParticipantPlayController;
 use App\Core\AttemptRepository;
 use App\Controllers\ParticipantQuizController;
 use App\Controllers\ParticipantResultController;
@@ -74,6 +75,14 @@ return static function (Config $config): Router {
         ),
         new VisitorIdentityCookie(new UuidV4Generator()),
     );
+    $publicParticipantPlay = new PublicParticipantPlayController(
+        $config,
+        new SmartLinkService(
+            new SmartLinkRepository($database),
+            new CampaignRepository($database),
+            new CampaignBatchRepository($database),
+        ),
+    );
 
     $router->get('/', static fn (Request $request): Response => $participantQuiz->index());
     $router->get('/result', static fn (Request $request): Response => $participantResult->preview('error'));
@@ -85,6 +94,10 @@ return static function (Config $config): Router {
     $router->getPattern(
         '/go/{alias}',
         static fn (Request $request, array $parameters): Response => $publicCampaignEntry->entry($parameters['alias']),
+    );
+    $router->getPattern(
+        '/play/{alias}',
+        static fn (Request $request, array $parameters): Response => $publicParticipantPlay->play($parameters['alias']),
     );
     $router->postPattern(
         '/api/public/start/{alias}',
