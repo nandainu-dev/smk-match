@@ -9,9 +9,13 @@ use App\Controllers\PublicParticipantSubmitController;
 use App\Controllers\PublicMonitorController;
 use App\Controllers\PublicMonitorPageController;
 use App\Controllers\AdminAuthController;
+use App\Controllers\AdminCampaignController;
 use App\Controllers\AdminProgramMediaController;
 use App\Controllers\AdminQuizController;
 use App\Core\AdminAccessService;
+use App\Core\AdminCampaignRepository;
+use App\Core\AdminCampaignService;
+use App\Core\AdminHistoryReadRepository;
 use App\Core\AdminProgramMediaRepository;
 use App\Core\AdminQuizRepository;
 use App\Core\AdminRepository;
@@ -22,6 +26,7 @@ use App\Controllers\ParticipantQuizController;
 use App\Controllers\ParticipantResultController;
 use App\Core\CampaignBatchRepository;
 use App\Core\CampaignRepository;
+use App\Core\CampaignService;
 use App\Core\Config;
 use App\Core\Database;
 use App\Core\ParticipantRepository;
@@ -154,6 +159,21 @@ return static function (Config $config): Router {
             new ProgramMediaStorage(SMK_MATCH_ROOT . '/public'),
         ),
     );
+    $adminCampaigns = new AdminCampaignController(
+        $config,
+        new AdminSession(),
+        new AdminCampaignService(
+            $config,
+            new AdminCampaignRepository($database),
+            new AdminHistoryReadRepository($database),
+            new CampaignService(
+                $database,
+                new CampaignRepository($database),
+                new CampaignBatchRepository($database),
+                new QuizVersionRepository($database),
+            ),
+        ),
+    );
 
     $router->get('/', static fn (Request $request): Response => $participantQuiz->index());
     $router->get('/result', static fn (Request $request): Response => $participantResult->preview('error'));
@@ -193,6 +213,8 @@ return static function (Config $config): Router {
     $router->get('/admin/login', static fn (Request $request): Response => $adminAuth->loginForm($request));
     $router->get('/admin', static fn (Request $request): Response => $adminQuizzes->index($request));
     $router->get('/admin/program-media', static fn (Request $request): Response => $adminProgramMedia->index($request));
+    $router->get('/admin/campaigns', static fn (Request $request): Response => $adminCampaigns->index($request));
+    $router->get('/admin/history', static fn (Request $request): Response => $adminCampaigns->history($request));
     $router->postPattern(
         '/admin/login',
         static fn (Request $request, array $parameters): Response => $adminAuth->login($request),
@@ -233,6 +255,10 @@ return static function (Config $config): Router {
     $router->postPattern(
         '/admin/programs/{programId}/mascot/remove',
         static fn (Request $request, array $parameters): Response => $adminProgramMedia->remove($request, $parameters['programId']),
+    );
+    $router->postPattern(
+        '/admin/campaigns/{campaignId}/batches/reset',
+        static fn (Request $request, array $parameters): Response => $adminCampaigns->reset($request, $parameters['campaignId']),
     );
     $router->postPattern(
         '/api/public/submit/{attemptUuid}',
