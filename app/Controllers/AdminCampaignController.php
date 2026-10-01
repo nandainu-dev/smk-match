@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace App\Controllers;
 
 use App\Core\AdminCampaignService;
+use App\Core\AdminHistoryXlsxExporter;
 use App\Core\AdminSession;
 use App\Core\Config;
 use App\Core\Request;
@@ -15,6 +16,7 @@ final class AdminCampaignController
         private readonly Config $config,
         private readonly AdminSession $sessions,
         private readonly AdminCampaignService $campaigns,
+        private readonly AdminHistoryXlsxExporter $exporter = new AdminHistoryXlsxExporter(),
     ) {
     }
 
@@ -94,6 +96,30 @@ final class AdminCampaignController
             $report['summary'],
             $report['filters'],
         );
+    }
+
+    public function export(Request $request): Response
+    {
+        $identity = $this->identity($request);
+        if ($identity === null) {
+            return $this->loginRequired();
+        }
+
+        try {
+            $report = $this->campaigns->history(
+                $identity['school_id'],
+                $this->optionalPositiveQueryId($request, 'campaign_id'),
+                $this->optionalPositiveQueryId($request, 'batch_id'),
+                $this->optionalDateQuery($request, 'from'),
+                $this->optionalDateQuery($request, 'to'),
+            );
+        } catch (\InvalidArgumentException $exception) {
+            return new Response($exception->getMessage(), 422, ['Content-Type' => 'text/plain; charset=utf-8']);
+        } catch (\RuntimeException) {
+            return $this->notFound();
+        }
+
+        return $this->exporter->export($report);
     }
 
     /** @return array{admin_id: int, school_id: int}|null */

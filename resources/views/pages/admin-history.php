@@ -18,6 +18,7 @@ ob_start();
             <label class="admin-field"><span>Dari</span><input type="date" name="from" value="<?= $filters['from'] === null ? '' : $escape($filters['from']) ?>"></label>
             <label class="admin-field"><span>Sampai</span><input type="date" name="to" value="<?= $filters['to'] === null ? '' : $escape($filters['to']) ?>"></label>
             <button class="admin-button" type="submit">Terapkan filter</button>
+            <button class="admin-button admin-button--quiet" type="submit" formaction="/admin/history/export.xlsx">Unduh XLSX</button>
         </form>
     </section>
     <section class="admin-card"><h2>Ringkasan program historis</h2><ul class="admin-history-list"><?php foreach ($summary as $program): ?><li><strong><?= $escape($program['code']) ?> — <?= $escape($program['name']) ?></strong>: <?= (int) $program['dominant_count'] ?> dominan · <?= number_format($program['score_average_percentage'], 2) ?>%</li><?php endforeach; ?></ul></section>

@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 define('SMK_MATCH_ROOT', dirname(__DIR__));
 
+require_once SMK_MATCH_ROOT . '/vendor/autoload.php';
+
 spl_autoload_register(static function (string $class): void {
     $prefix = 'App\\';
     if (!str_starts_with($class, $prefix)) {

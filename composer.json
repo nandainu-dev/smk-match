@@ -1,0 +1,9 @@
+{
+    "name": "smk-match/local-demo",
+    "description": "SMK Match local demo application",
+    "type": "project",
+    "license": "proprietary",
+    "require": {
+        "phpoffice/phpspreadsheet": "^5.10"
+    }
+}

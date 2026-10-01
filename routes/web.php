@@ -16,6 +16,7 @@ use App\Core\AdminAccessService;
 use App\Core\AdminCampaignRepository;
 use App\Core\AdminCampaignService;
 use App\Core\AdminHistoryReadRepository;
+use App\Core\AdminHistoryXlsxExporter;
 use App\Core\AdminProgramMediaRepository;
 use App\Core\AdminQuizRepository;
 use App\Core\AdminRepository;
@@ -173,6 +174,7 @@ return static function (Config $config): Router {
                 new QuizVersionRepository($database),
             ),
         ),
+        new AdminHistoryXlsxExporter(),
     );
 
     $router->get('/', static fn (Request $request): Response => $participantQuiz->index());
@@ -215,6 +217,7 @@ return static function (Config $config): Router {
     $router->get('/admin/program-media', static fn (Request $request): Response => $adminProgramMedia->index($request));
     $router->get('/admin/campaigns', static fn (Request $request): Response => $adminCampaigns->index($request));
     $router->get('/admin/history', static fn (Request $request): Response => $adminCampaigns->history($request));
+    $router->get('/admin/history/export.xlsx', static fn (Request $request): Response => $adminCampaigns->export($request));
     $router->postPattern(
         '/admin/login',
         static fn (Request $request, array $parameters): Response => $adminAuth->login($request),
