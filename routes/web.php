@@ -9,8 +9,10 @@ use App\Controllers\PublicParticipantSubmitController;
 use App\Controllers\PublicMonitorController;
 use App\Controllers\PublicMonitorPageController;
 use App\Controllers\AdminAuthController;
+use App\Controllers\AdminProgramMediaController;
 use App\Controllers\AdminQuizController;
 use App\Core\AdminAccessService;
+use App\Core\AdminProgramMediaRepository;
 use App\Core\AdminQuizRepository;
 use App\Core\AdminRepository;
 use App\Core\AdminSession;
@@ -28,6 +30,8 @@ use App\Core\ParticipantStartService;
 use App\Core\MonitorReadRepository;
 use App\Core\MonitorService;
 use App\Core\ProgramProvider;
+use App\Core\ProgramMediaStorage;
+use App\Core\ProgramPresentationMediaService;
 use App\Core\QuestionImageStorage;
 use App\Core\QuizAuthoringService;
 use App\Core\QuizProvider;
@@ -142,6 +146,14 @@ return static function (Config $config): Router {
         new QuizAuthoringService($adminQuizVersions),
         new QuestionImageStorage(SMK_MATCH_ROOT . '/public'),
     );
+    $adminProgramMedia = new AdminProgramMediaController(
+        $config,
+        new AdminSession(),
+        new ProgramPresentationMediaService(
+            new AdminProgramMediaRepository($database),
+            new ProgramMediaStorage(SMK_MATCH_ROOT . '/public'),
+        ),
+    );
 
     $router->get('/', static fn (Request $request): Response => $participantQuiz->index());
     $router->get('/result', static fn (Request $request): Response => $participantResult->preview('error'));
@@ -180,6 +192,7 @@ return static function (Config $config): Router {
     );
     $router->get('/admin/login', static fn (Request $request): Response => $adminAuth->loginForm($request));
     $router->get('/admin', static fn (Request $request): Response => $adminQuizzes->index($request));
+    $router->get('/admin/program-media', static fn (Request $request): Response => $adminProgramMedia->index($request));
     $router->postPattern(
         '/admin/login',
         static fn (Request $request, array $parameters): Response => $adminAuth->login($request),
@@ -212,6 +225,14 @@ return static function (Config $config): Router {
     $router->postPattern(
         '/admin/quizzes/{quizId}/versions/{versionId}/discard',
         static fn (Request $request, array $parameters): Response => $adminQuizzes->discard($request, $parameters['quizId'], $parameters['versionId']),
+    );
+    $router->postPattern(
+        '/admin/programs/{programId}/mascot',
+        static fn (Request $request, array $parameters): Response => $adminProgramMedia->upload($request, $parameters['programId']),
+    );
+    $router->postPattern(
+        '/admin/programs/{programId}/mascot/remove',
+        static fn (Request $request, array $parameters): Response => $adminProgramMedia->remove($request, $parameters['programId']),
     );
     $router->postPattern(
         '/api/public/submit/{attemptUuid}',

@@ -37,9 +37,7 @@ final class QuizVersionProgramPresentation
         $this->assertNullablePlainText($this->descriptionSnapshot, 'Description snapshot');
         $this->assertNullablePlainText($this->superpowerSnapshot, 'Superpower snapshot');
 
-        if ($this->mascotPathSnapshot !== null
-            && (str_contains($this->mascotPathSnapshot, '..')
-                || preg_match('#^/assets/[A-Za-z0-9][A-Za-z0-9._/-]*$#', $this->mascotPathSnapshot) !== 1)) {
+        if ($this->mascotPathSnapshot !== null && !$this->isSafeMascotPath($this->mascotPathSnapshot)) {
             throw new \InvalidArgumentException('Mascot path snapshot must be a safe local asset path.');
         }
 
@@ -88,5 +86,15 @@ final class QuizVersionProgramPresentation
                 throw new \InvalidArgumentException($label . ' must be a JSON list of plain strings.');
             }
         }
+    }
+
+    private function isSafeMascotPath(string $path): bool
+    {
+        if (str_contains($path, '..')) {
+            return false;
+        }
+
+        return preg_match('#^/assets/[A-Za-z0-9][A-Za-z0-9._/-]*$#', $path) === 1
+            || ProgramMediaStorage::isCanonicalPublicPath($path);
     }
 }
