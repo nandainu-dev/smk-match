@@ -9,14 +9,17 @@ use App\Controllers\PublicParticipantSubmitController;
 use App\Controllers\PublicMonitorController;
 use App\Controllers\PublicMonitorPageController;
 use App\Controllers\AdminAuthController;
+use App\Controllers\AdminAnalyticsController;
 use App\Controllers\AdminCampaignController;
 use App\Controllers\AdminProgramMediaController;
 use App\Controllers\AdminQuizController;
 use App\Core\AdminAccessService;
+use App\Core\AdminAnalyticsService;
 use App\Core\AdminCampaignRepository;
 use App\Core\AdminCampaignService;
 use App\Core\AdminHistoryReadRepository;
 use App\Core\AdminHistoryXlsxExporter;
+use App\Core\AnalyticsReadRepository;
 use App\Core\AdminProgramMediaRepository;
 use App\Core\AdminQuizRepository;
 use App\Core\AdminRepository;
@@ -176,6 +179,15 @@ return static function (Config $config): Router {
         ),
         new AdminHistoryXlsxExporter(),
     );
+    $adminAnalytics = new AdminAnalyticsController(
+        $config,
+        new AdminSession(),
+        new AdminAnalyticsService(
+            $config,
+            new AdminCampaignRepository($database),
+            new AnalyticsReadRepository($database),
+        ),
+    );
 
     $router->get('/', static fn (Request $request): Response => $participantQuiz->index());
     $router->get('/result', static fn (Request $request): Response => $participantResult->preview('error'));
@@ -218,6 +230,7 @@ return static function (Config $config): Router {
     $router->get('/admin/campaigns', static fn (Request $request): Response => $adminCampaigns->index($request));
     $router->get('/admin/history', static fn (Request $request): Response => $adminCampaigns->history($request));
     $router->get('/admin/history/export.xlsx', static fn (Request $request): Response => $adminCampaigns->export($request));
+    $router->get('/admin/analytics', static fn (Request $request): Response => $adminAnalytics->index($request));
     $router->postPattern(
         '/admin/login',
         static fn (Request $request, array $parameters): Response => $adminAuth->login($request),

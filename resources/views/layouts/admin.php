@@ -62,6 +62,7 @@
     <a href="/admin">Quiz</a>
     <a href="/admin/campaigns">Kampanye</a>
     <a href="/admin/history">Riwayat</a>
+    <a href="/admin/analytics">Analitik</a>
     <a href="/admin/program-media">Media program</a>
 </nav>
 <?= $content ?>
