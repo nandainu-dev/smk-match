@@ -38,29 +38,45 @@ ob_start();
                 </div>
                 <form method="post" action="/admin/quizzes/<?= (int) $quiz['id'] ?>/draft">
                     <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
-                    <button class="admin-button" type="submit">Buat draft</button>
+                    <fieldset class="admin-program-selection">
+                        <legend>Pilih tepat 3 program aktif untuk versi baru</legend>
+                        <?php foreach ($activePrograms as $programIndex => $program): ?>
+                            <label class="admin-check">
+                                <input
+                                    type="checkbox"
+                                    name="program_ids[]"
+                                    value="<?= (int) $program['id'] ?>"
+                                    <?= $programIndex < 3 ? 'checked' : '' ?>
+                                >
+                                <?= $escape($program['name']) ?> <span>(<?= $escape($program['code']) ?>)</span>
+                            </label>
+                        <?php endforeach; ?>
+                    </fieldset>
+                    <p class="admin-hint">Pilihan A/B/C/D dapat dipetakan berulang kali ke salah satu dari tiga program ini pada editor draft.</p>
+                    <button class="admin-button" type="submit" <?= count($activePrograms) < 3 ? 'disabled' : '' ?>>Buat draft 3 program</button>
                 </form>
             </div>
 
             <div class="admin-version-list">
                 <?php foreach ($quiz['versions'] as $version): ?>
+                    <?php $statusLabel = ucfirst($version['status']); ?>
                     <article class="admin-version-row">
                         <div>
                             <strong>Versi <?= (int) $version['version_number'] ?></strong>
                             <span><?= $escape($version['name']) ?></span>
                         </div>
                         <div class="admin-version-meta">
-                            <span class="admin-status admin-status--<?= strtolower($escape($version['status'])) ?>"><?= $escape($version['status']) ?></span>
+                            <span class="admin-status admin-status--<?= strtolower($escape($version['status'])) ?>"><?= $escape($statusLabel) ?></span>
                             <?php if ($version['is_used']): ?>
                                 <span class="admin-used">Pernah dipakai</span>
                             <?php endif; ?>
                         </div>
                         <div class="admin-actions">
-                            <?php if ($version['status'] === 'DRAFT' && !$version['is_used']): ?>
+                            <?php if ($version['status'] === 'draft' && !$version['is_used']): ?>
                                 <a class="admin-button admin-button--quiet" href="/admin/quizzes/<?= (int) $quiz['id'] ?>/versions/<?= (int) $version['id'] ?>/edit">Edit draft</a>
-                                <form method="post" action="/admin/quizzes/<?= (int) $quiz['id'] ?>/versions/<?= (int) $version['id'] ?>/publish">
+                                <form method="post" action="/admin/quizzes/<?= (int) $quiz['id'] ?>/versions/<?= (int) $version['id'] ?>/publish" onsubmit="return confirm('Publikasikan quiz ini? Setelah dipublikasikan, versi ini siap digunakan Campaign, tetapi belum otomatis diaktifkan untuk Campaign.')">
                                     <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
-                                    <button class="admin-button" type="submit">Publikasikan</button>
+                                    <button class="admin-button" type="submit">PUBLISH</button>
                                 </form>
                                 <form method="post" action="/admin/quizzes/<?= (int) $quiz['id'] ?>/versions/<?= (int) $version['id'] ?>/discard">
                                     <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">

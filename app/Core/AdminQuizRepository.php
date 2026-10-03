@@ -135,6 +135,31 @@ final class AdminQuizRepository
         return $programs;
     }
 
+    /** @return list<array{id: int, code: string, name: string}> */
+    public function activeProgramsForSchool(int $schoolId): array
+    {
+        $this->assertPositiveId($schoolId, 'School identity');
+
+        $statement = $this->connection()->prepare(
+            'SELECT id, short_name, name
+             FROM programs
+             WHERE school_id = :school_id AND is_active = 1
+             ORDER BY sort_order ASC, id ASC'
+        );
+        $statement->execute(['school_id' => $schoolId]);
+
+        $programs = [];
+        foreach ($statement->fetchAll() as $row) {
+            $programs[] = [
+                'id' => $this->rowPositiveInt($row, 'id'),
+                'code' => $this->rowString($row, 'short_name'),
+                'name' => $this->rowString($row, 'name'),
+            ];
+        }
+
+        return $programs;
+    }
+
     private function connection(): PDO
     {
         return $this->database->connection();

@@ -15,7 +15,15 @@ ob_start();
             <h1><?= $escape($version->name) ?></h1>
             <p>Versi <?= $version->versionNumber ?> · <span class="admin-status admin-status--<?= strtolower($escape($version->status)) ?>"><?= $escape($version->status) ?></span></p>
         </div>
-        <a class="admin-button admin-button--quiet" href="/admin/quizzes">Kembali ke daftar</a>
+        <div class="admin-actions">
+            <?php if ($isEditable): ?>
+                <form method="post" action="/admin/quizzes/<?= (int) $quiz['id'] ?>/versions/<?= $version->id ?>/publish" onsubmit="return confirm('Publikasikan quiz ini? Setelah dipublikasikan, versi ini siap digunakan Campaign, tetapi belum otomatis diaktifkan untuk Campaign.')">
+                    <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
+                    <button class="admin-button" type="submit">PUBLISH</button>
+                </form>
+            <?php endif; ?>
+            <a class="admin-button admin-button--quiet" href="/admin/quizzes">Kembali ke daftar</a>
+        </div>
     </header>
 
     <?php if ($message !== null): ?>
@@ -35,14 +43,15 @@ ob_start();
                     <span>Nama versi</span>
                     <input name="name" required value="<?= $escape($version->name) ?>">
                 </label>
-                <p class="admin-hint">Program versi ini dikunci dari snapshot: <?= $escape(implode(', ', $programCodes)) ?>.</p>
+                <p class="admin-hint">Tiga program versi ini dikunci dari snapshot: <?= $escape(implode(', ', $programCodes)) ?>. Pilih jurusan untuk setiap pilihan jawaban.</p>
             </section>
 
+            <div id="admin-question-list">
             <?php foreach ($questions as $questionIndex => $question): ?>
                 <section class="admin-card admin-question-card">
                     <div class="admin-card-heading">
                         <h2>Pertanyaan <?= $questionIndex + 1 ?></h2>
-                        <label class="admin-check"><input type="checkbox" name="questions[<?= $questionIndex ?>][delete]" value="1"> Hapus pertanyaan</label>
+                        <button class="admin-button admin-button--danger" type="submit" name="questions[<?= $questionIndex ?>][delete]" value="1" formnovalidate onclick="return confirm('Hapus pertanyaan ini dari draft?')">Hapus pertanyaan</button>
                     </div>
                     <input type="hidden" name="questions[<?= $questionIndex ?>][source_id]" value="<?= $escape($question['id']) ?>">
                     <div class="admin-grid">
@@ -71,47 +80,29 @@ ob_start();
                     <?php endif; ?>
 
                     <h3>Opsi jawaban</h3>
-                    <?php foreach ($question['options'] as $optionIndex => $option): ?>
-                        <?php $weightLines = array_map(static fn (array $weight): string => $weight['program'] . '=' . $weight['weight'], $option['weights']); ?>
+                    <div data-options>
+                    <?php foreach (array_slice($question['options'], 0, 4) as $optionIndex => $option): ?>
+                        <?php $weightsByProgram = []; foreach ($option['weights'] as $weight) { $weightsByProgram[$weight['program']] = (string) $weight['weight']; } ?>
+                        <?php $optionLetter = chr(65 + $optionIndex); $primaryProgram = array_key_first($weightsByProgram) ?? ''; ?>
                         <fieldset class="admin-option-row">
-                            <legend>Opsi <?= $optionIndex + 1 ?></legend>
+                            <legend>Pilihan <?= $escape($optionLetter) ?></legend>
                             <input type="hidden" name="questions[<?= $questionIndex ?>][options][<?= $optionIndex ?>][source_id]" value="<?= $escape($option['id']) ?>">
-                            <label class="admin-field admin-grid-wide"><span>Teks opsi</span><input name="questions[<?= $questionIndex ?>][options][<?= $optionIndex ?>][text]" required value="<?= $escape($option['text']) ?>"></label>
-                            <label class="admin-field"><span>Urutan</span><input type="number" min="0" name="questions[<?= $questionIndex ?>][options][<?= $optionIndex ?>][order]" required value="<?= (int) $option['order'] ?>"></label>
-                            <label class="admin-field"><span>Bobot (satu per baris: KODE=angka)</span><textarea name="questions[<?= $questionIndex ?>][options][<?= $optionIndex ?>][weights]"><?= $escape(implode("\n", $weightLines)) ?></textarea></label>
-                            <label class="admin-check"><input type="checkbox" name="questions[<?= $questionIndex ?>][options][<?= $optionIndex ?>][delete]" value="1"> Hapus opsi</label>
+                            <label class="admin-field admin-grid-wide"><span>Jawaban</span><input name="questions[<?= $questionIndex ?>][options][<?= $optionIndex ?>][text]" required value="<?= $escape($option['text']) ?>"></label>
+                            <input type="hidden" name="questions[<?= $questionIndex ?>][options][<?= $optionIndex ?>][order]" value="<?= (int) $option['order'] ?>">
+                            <label class="admin-field"><span>Jurusan</span><select name="questions[<?= $questionIndex ?>][options][<?= $optionIndex ?>][primary_program]" required><option value="">Pilih jurusan</option><?php foreach ($programCodes as $programCode): ?><option value="<?= $escape($programCode) ?>"<?= $primaryProgram === $programCode ? ' selected' : '' ?>><?= $escape($programCode) ?></option><?php endforeach; ?></select></label>
                         </fieldset>
                     <?php endforeach; ?>
-                    <?php $newOptionIndex = count($question['options']); ?>
-                    <fieldset class="admin-option-row admin-option-row--new">
-                        <legend>Opsi tambahan</legend>
-                        <label class="admin-field admin-grid-wide"><span>Teks opsi</span><input name="questions[<?= $questionIndex ?>][options][<?= $newOptionIndex ?>][text]"></label>
-                        <label class="admin-field"><span>Urutan</span><input type="number" min="0" name="questions[<?= $questionIndex ?>][options][<?= $newOptionIndex ?>][order]" value="<?= ((int) $question['options'][count($question['options']) - 1]['order']) + 10 ?>"></label>
-                        <label class="admin-field"><span>Bobot (KODE=angka)</span><textarea name="questions[<?= $questionIndex ?>][options][<?= $newOptionIndex ?>][weights]"></textarea></label>
-                    </fieldset>
+                    </div>
                 </section>
             <?php endforeach; ?>
-            <?php $newQuestionIndex = count($questions); ?>
-            <section class="admin-card admin-question-card admin-question-card--new">
-                <h2>Tambahkan pertanyaan</h2>
-                <div class="admin-grid">
-                    <label class="admin-field admin-grid-wide"><span>Pertanyaan</span><textarea name="questions[<?= $newQuestionIndex ?>][text]"></textarea></label>
-                    <label class="admin-field admin-grid-wide"><span>Bantuan (opsional)</span><textarea name="questions[<?= $newQuestionIndex ?>][help_text]"></textarea></label>
-                    <label class="admin-field"><span>Urutan</span><input type="number" min="0" name="questions[<?= $newQuestionIndex ?>][order]" value="<?= (count($questions) + 1) * 10 ?>"></label>
-                    <label class="admin-field"><span>Gambar JPEG, PNG, atau WebP</span><input type="file" name="question_image_<?= $newQuestionIndex ?>" accept="image/jpeg,image/png,image/webp"></label>
-                </div>
-                <?php for ($optionIndex = 0; $optionIndex < 2; $optionIndex++): ?>
-                    <fieldset class="admin-option-row admin-option-row--new">
-                        <legend>Opsi baru <?= $optionIndex + 1 ?></legend>
-                        <label class="admin-field admin-grid-wide"><span>Teks opsi</span><input name="questions[<?= $newQuestionIndex ?>][options][<?= $optionIndex ?>][text]"></label>
-                        <label class="admin-field"><span>Urutan</span><input type="number" min="0" name="questions[<?= $newQuestionIndex ?>][options][<?= $optionIndex ?>][order]" value="<?= ($optionIndex + 1) * 10 ?>"></label>
-                        <label class="admin-field"><span>Bobot (KODE=angka)</span><textarea name="questions[<?= $newQuestionIndex ?>][options][<?= $optionIndex ?>][weights]"></textarea></label>
-                    </fieldset>
-                <?php endfor; ?>
-            </section>
-            <p class="admin-hint">Isi pertanyaan atau opsi tambahan hanya bila diperlukan. Setiap pertanyaan yang disimpan membutuhkan sedikitnya dua opsi valid.</p>
+            </div>
+            <button id="admin-add-question" class="admin-button admin-button--quiet" type="button">+ Tambahkan pertanyaan</button>
+            <p class="admin-hint">Setiap pertanyaan memiliki empat pilihan A–D. Tambahkan pertanyaan sebanyak yang diperlukan.</p>
             <button class="admin-button" type="submit">Simpan draft</button>
         </form>
+        <template id="admin-question-template"><section class="admin-card admin-question-card"><div class="admin-card-heading"><h2>Pertanyaan <span data-question-number></span></h2><button class="admin-button admin-button--danger" type="button" data-delete-question>Hapus pertanyaan</button></div><div class="admin-grid"><label class="admin-field admin-grid-wide"><span>Pertanyaan</span><textarea data-name="text" required></textarea></label><label class="admin-field admin-grid-wide"><span>Bantuan (opsional)</span><textarea data-name="help_text"></textarea></label><label class="admin-field"><span>Urutan</span><input type="number" min="0" data-name="order" required></label></div><h3>Opsi jawaban</h3><div data-options></div></section></template>
+        <script>window.SMK_MATCH_AUTHORING_PROGRAMS = <?= json_encode(array_values($programCodes), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;</script>
+        <script src="/assets/js/admin-quiz-authoring.js" defer></script>
     <?php endif; ?>
 </main>
 <?php

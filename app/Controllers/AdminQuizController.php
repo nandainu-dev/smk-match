@@ -14,6 +14,7 @@ use App\Core\QuizVersionRepository;
 use App\Core\QuizVersionService;
 use App\Core\Request;
 use App\Core\Response;
+use App\Core\ThreeProgramQuizConfiguration;
 
 final class AdminQuizController
 {
@@ -25,6 +26,7 @@ final class AdminQuizController
         private readonly QuizVersionService $versionService,
         private readonly QuizAuthoringService $authoring,
         private readonly QuestionImageStorage $images,
+        private readonly ThreeProgramQuizConfiguration $threePrograms,
     ) {
     }
 
@@ -35,7 +37,10 @@ final class AdminQuizController
             return $this->loginRequired();
         }
 
-        return $this->renderList($this->quizzes->listQuizzesForSchool($identity['school_id']));
+        return $this->renderList(
+            $this->quizzes->listQuizzesForSchool($identity['school_id']),
+            $this->quizzes->activeProgramsForSchool($identity['school_id']),
+        );
     }
 
     public function editor(Request $request, string $quizId, string $versionId): Response
@@ -48,6 +53,17 @@ final class AdminQuizController
         $context = $this->versionContext($identity['school_id'], $quizId, $versionId);
         if ($context === null) {
             return $this->notFound();
+        }
+
+        try {
+            $this->threePrograms->assertVersion($context['version']);
+        } catch (\Throwable) {
+            return $this->renderEditor(
+                $context['quiz'],
+                $context['version'],
+                'Versi ini tidak memakai tepat tiga program dan tidak dapat diedit melalui konfigurasi produk.',
+                422,
+            );
         }
 
         return $this->renderEditor($context['quiz'], $context['version'], null, 200);
@@ -69,14 +85,22 @@ final class AdminQuizController
         }
 
         try {
-            $draft = $this->versionService->getOrCreateDraft(
-                $quiz['id'],
-                $this->initialDefinition($quiz['name'], $this->quizzes->activeProgramCodesForSchool($identity['school_id'])),
+            $selectedProgramIds = $this->selectedProgramIds($request);
+            $programs = $this->threePrograms->selectedProgramCodes(
+                $this->quizzes->activeProgramsForSchool($identity['school_id']),
+                $selectedProgramIds,
             );
+            $draft = $this->versionService->getOrCreateDraftForProgramIds(
+                $quiz['id'],
+                $this->initialDefinition($quiz['name'], $programs),
+                $selectedProgramIds,
+            );
+            $this->threePrograms->assertVersion($draft);
         } catch (\Throwable) {
             return $this->renderList(
                 $this->quizzes->listQuizzesForSchool($identity['school_id']),
-                'Draft baru tidak dapat dibuat. Pastikan sekolah memiliki program aktif.',
+                $this->quizzes->activeProgramsForSchool($identity['school_id']),
+                'Draft baru tidak dapat dibuat. Pilih tepat tiga program aktif milik sekolah.',
                 422,
             );
         }
@@ -100,14 +124,19 @@ final class AdminQuizController
         }
 
         try {
+            $this->threePrograms->assertVersion($context['version']);
             $draft = $this->versionService->cloneVersionToDraft($context['quiz']['id'], $context['version']->id);
         } catch (\Throwable) {
-            return $this->renderList($this->quizzes->listQuizzesForSchool($identity['school_id']), 'Versi tidak dapat dikloning.', 422);
+            return $this->renderList(
+                $this->quizzes->listQuizzesForSchool($identity['school_id']),
+                $this->quizzes->activeProgramsForSchool($identity['school_id']),
+                'Versi tidak dapat dikloning. Konfigurasi produk memerlukan tepat tiga program.',
+                422,
+            );
         }
 
         return $this->redirect('/admin/quizzes/' . $context['quiz']['id'] . '/versions/' . $draft->id . '/edit');
     }
-
 
     public function cloneVersionWithCurrentPresentations(
         Request $request,
@@ -118,48 +147,31 @@ final class AdminQuizController
         if ($identity === null) {
             return $this->loginRequired();
         }
-
         if (!$this->validCsrf($request)) {
-            return new Response(
-                'Permintaan tidak dapat diproses.',
-                403,
-                ['Content-Type' => 'text/plain; charset=utf-8'],
-            );
+            return new Response('Permintaan tidak dapat diproses.', 403, ['Content-Type' => 'text/plain; charset=utf-8']);
         }
 
-        $context = $this->versionContext(
-            $identity['school_id'],
-            $quizId,
-            $versionId,
-        );
-
+        $context = $this->versionContext($identity['school_id'], $quizId, $versionId);
         if ($context === null) {
             return $this->notFound();
         }
 
         try {
-            $draft = $this->versionService
-                ->cloneVersionToDraftWithCurrentPresentations(
-                    $context['quiz']['id'],
-                    $context['version']->id,
-                );
+            $this->threePrograms->assertVersion($context['version']);
+            $draft = $this->versionService->cloneVersionToDraftWithCurrentPresentations(
+                $context['quiz']['id'],
+                $context['version']->id,
+            );
         } catch (\Throwable) {
             return $this->renderList(
-                $this->quizzes->listQuizzesForSchool(
-                    $identity['school_id'],
-                ),
+                $this->quizzes->listQuizzesForSchool($identity['school_id']),
+                $this->quizzes->activeProgramsForSchool($identity['school_id']),
                 'Draft dengan data program terbaru tidak dapat dibuat.',
                 422,
             );
         }
 
-        return $this->redirect(
-            '/admin/quizzes/'
-            . $context['quiz']['id']
-            . '/versions/'
-            . $draft->id
-            . '/edit'
-        );
+        return $this->redirect('/admin/quizzes/' . $context['quiz']['id'] . '/versions/' . $draft->id . '/edit');
     }
 
     public function publish(Request $request, string $quizId, string $versionId): Response
@@ -189,6 +201,11 @@ final class AdminQuizController
         if (!$context['version']->isDraft() || $this->versions->hasPersistedUsage($context['version']->id)) {
             return $this->renderEditor($context['quiz'], $context['version'], 'Versi historis atau non-draft tidak dapat diubah.', 422);
         }
+        try {
+            $this->threePrograms->assertVersion($context['version']);
+        } catch (\Throwable) {
+            return $this->renderEditor($context['quiz'], $context['version'], 'Draft ini tidak memakai tepat tiga program dan tidak dapat diubah melalui konfigurasi produk.', 422);
+        }
 
         $newFiles = [];
         try {
@@ -199,12 +216,18 @@ final class AdminQuizController
                 $context['version']->id,
                 $definition,
             );
+        } catch (\InvalidArgumentException) {
+            foreach ($newFiles as $path) {
+                $this->images->discardNewlyStored($path);
+            }
+
+            return $this->renderEditor($context['quiz'], $context['version'], 'Draft tidak dapat disimpan. Lengkapi teks dan pilih jurusan untuk setiap Pilihan A–D.', 422);
         } catch (\Throwable) {
             foreach ($newFiles as $path) {
                 $this->images->discardNewlyStored($path);
             }
 
-            return $this->renderEditor($context['quiz'], $context['version'], 'Draft tidak dapat disimpan. Periksa pertanyaan, opsi, bobot, dan gambar.', 422);
+            return $this->renderEditor($context['quiz'], $context['version'], 'Draft tidak dapat disimpan. Periksa pertanyaan dan gambar.', 422);
         }
 
         return $this->renderEditor($context['quiz'], $updated, 'Draft berhasil disimpan.', 200);
@@ -250,12 +273,18 @@ final class AdminQuizController
 
         try {
             if ($operation === 'publish') {
+                $this->threePrograms->assertVersion($context['version']);
                 $this->versionService->publish($context['quiz']['id'], $context['version']->id);
             } else {
                 $this->versionService->discard($context['quiz']['id'], $context['version']->id);
             }
         } catch (\Throwable) {
-            return $this->renderList($this->quizzes->listQuizzesForSchool($identity['school_id']), 'Status versi tidak dapat diubah.', 422);
+            return $this->renderList(
+                $this->quizzes->listQuizzesForSchool($identity['school_id']),
+                $this->quizzes->activeProgramsForSchool($identity['school_id']),
+                'Status versi tidak dapat diubah.',
+                422,
+            );
         }
 
         return $this->redirect('/admin/quizzes');
@@ -308,16 +337,22 @@ final class AdminQuizController
                 }
 
                 $text = $this->stringField($optionInput, 'text');
-                if (trim($text) === '' && $this->stringField($optionInput, 'weights') === '') {
-                    continue;
+                $weightInput = $this->weightInput($optionInput, $version->definition()->programs);
+                $weights = $this->weights($weightInput, $version->definition()->programs);
+                if (trim($text) === '' || count($weights) !== 1 || $weights[0]['weight'] !== 1.0) {
+                    throw new \InvalidArgumentException('Each option requires text and one program.');
                 }
 
                 $options[] = [
                     'id' => 'option-' . $questionIndex . '-' . $optionIndex,
                     'text' => $text,
                     'order' => $this->orderField($optionInput, 'order'),
-                    'weights' => $this->weights($this->stringField($optionInput, 'weights'), $version->definition()->programs),
+                    'weights' => $weights,
                 ];
+            }
+
+            if (count($options) !== 4) {
+                throw new \InvalidArgumentException('Each question requires options A-D.');
             }
 
             $text = $this->stringField($input, 'text');
@@ -357,6 +392,52 @@ final class AdminQuizController
         }
 
         return $assignments;
+    }
+
+    /**
+     * The friendly form submits dynamic program fields; this converts them to
+     * the locked KODE=angka representation consumed by the existing parser.
+     * Legacy requests using the original weights textarea remain supported.
+     *
+     * @param array<string, mixed> $values
+     * @param array<string, bool> $programs
+     */
+    private function weightInput(array $values, array $programs): string
+    {
+        $primaryProgram = $this->stringField($values, 'primary_program');
+        if ($primaryProgram !== '') {
+            if (!array_key_exists($primaryProgram, $programs)) {
+                throw new \InvalidArgumentException('Primary weight program is invalid.');
+            }
+
+            return $primaryProgram . '=1';
+        }
+
+        if (!array_key_exists('weights_by_program', $values)) {
+            return $this->stringField($values, 'weights');
+        }
+
+        $submitted = $values['weights_by_program'];
+        if (!is_array($submitted)) {
+            throw new \InvalidArgumentException('Weight assignments are invalid.');
+        }
+
+        $assignments = [];
+        foreach ($programs as $code => $_present) {
+            $value = $submitted[$code] ?? '';
+            if (!is_string($value) || trim($value) === '') {
+                continue;
+            }
+            $assignments[] = $code . '=' . trim($value);
+        }
+
+        foreach ($submitted as $code => $_value) {
+            if (!is_string($code) || !array_key_exists($code, $programs)) {
+                throw new \InvalidArgumentException('Weight program is invalid.');
+            }
+        }
+
+        return implode("\n", $assignments);
     }
 
     /** @param array<string, mixed> $values */
@@ -412,6 +493,25 @@ final class AdminQuizController
         return (int) $value;
     }
 
+    /** @return list<int> */
+    private function selectedProgramIds(Request $request): array
+    {
+        $selected = $request->formValues()['program_ids'] ?? null;
+        if (!is_array($selected)) {
+            throw new \InvalidArgumentException('Program selection is required.');
+        }
+
+        $programIds = [];
+        foreach ($selected as $programId) {
+            if (!is_string($programId) || preg_match('/\A[1-9][0-9]*\z/D', $programId) !== 1) {
+                throw new \InvalidArgumentException('Program selection is invalid.');
+            }
+            $programIds[] = (int) $programId;
+        }
+
+        return $programIds;
+    }
+
     /** @param array<string, bool> $programs */
     private function initialDefinition(string $quizName, array $programs): QuizDefinition
     {
@@ -419,26 +519,45 @@ final class AdminQuizController
             throw new \InvalidArgumentException('At least one active program is required.');
         }
 
+        $programCodes = array_keys($programs);
+
+        $questions = [];
+        for ($questionNumber = 1; $questionNumber <= 5; $questionNumber++) {
+            $options = [];
+            foreach (['A', 'B', 'C', 'D'] as $optionIndex => $label) {
+                $options[] = [
+                    'id' => 'option-initial-' . $questionNumber . '-' . strtolower($label),
+                    'text' => 'Pilihan ' . $label,
+                    'order' => ($optionIndex + 1) * 10,
+                    'weights' => [[
+                        'program' => $programCodes[$optionIndex % count($programCodes)],
+                        'weight' => 1.0,
+                    ]],
+                ];
+            }
+            $questions[] = [
+                'id' => 'question-initial-' . $questionNumber,
+                'text' => 'Pertanyaan ' . $questionNumber,
+                'help_text' => null,
+                'image_path' => null,
+                'order' => $questionNumber * 10,
+                'options' => $options,
+            ];
+        }
+
         return new QuizDefinition(
             'Draft ' . $quizName,
             1,
             $programs,
-            [[
-                'id' => 'question-initial',
-                'text' => 'Pertanyaan baru',
-                'help_text' => null,
-                'image_path' => null,
-                'order' => 10,
-                'options' => [
-                    ['id' => 'option-initial-a', 'text' => 'Pilihan A', 'order' => 10, 'weights' => []],
-                    ['id' => 'option-initial-b', 'text' => 'Pilihan B', 'order' => 20, 'weights' => []],
-                ],
-            ]],
+            $questions,
         );
     }
 
-    /** @param list<array{id: int, name: string, versions: list<array{id: int, version_number: int, name: string, status: string, is_used: bool}>}> $quizzes */
-    private function renderList(array $quizzes, ?string $message = null, int $status = 200): Response
+    /**
+     * @param list<array{id: int, name: string, versions: list<array{id: int, version_number: int, name: string, status: string, is_used: bool}>}> $quizzes
+     * @param list<array{id: int, code: string, name: string}> $activePrograms
+     */
+    private function renderList(array $quizzes, array $activePrograms, ?string $message = null, int $status = 200): Response
     {
         $appName = $this->escape($this->config->string('APP_NAME'));
         $csrfToken = $this->escape($this->sessions->csrfToken());

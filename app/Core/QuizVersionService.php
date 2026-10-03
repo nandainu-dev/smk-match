@@ -38,6 +38,28 @@ final class QuizVersionService
         return $this->repository->createDraftSnapshot($quizId, $initialSnapshot);
     }
 
+    /** @param list<int> $selectedProgramIds */
+    public function getOrCreateDraftForProgramIds(
+        int $quizId,
+        QuizDefinition $initialSnapshot,
+        array $selectedProgramIds,
+    ): QuizVersion {
+        $this->assertPositiveId($quizId, 'Quiz identity');
+
+        $draft = $this->repository->findDraftForQuiz($quizId);
+        if ($draft !== null) {
+            if ($draft->quizId !== $quizId || !$draft->isDraft() || !$draft->isEditable()) {
+                throw new RuntimeException('Persistence invariant violation: editable draft has an invalid lifecycle state.');
+            }
+
+            $this->assertUnused($draft);
+
+            return $draft;
+        }
+
+        return $this->repository->createDraftSnapshotForProgramIds($quizId, $initialSnapshot, $selectedProgramIds);
+    }
+
     public function cloneVersionToDraft(
         int $quizId,
         int $sourceVersionId,

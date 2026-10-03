@@ -48,6 +48,7 @@ use App\Core\QuizVersionRepository;
 use App\Core\QuizVersionProgramRepository;
 use App\Core\QuizVersionService;
 use App\Core\Request;
+use App\Core\ThreeProgramQuizConfiguration;
 use App\Core\Response;
 use App\Core\ResultPresentationFixtureProvider;
 use App\Core\ResultRepository;
@@ -154,6 +155,7 @@ return static function (Config $config): Router {
         new QuizVersionService($adminQuizVersions),
         new QuizAuthoringService($adminQuizVersions),
         new QuestionImageStorage(SMK_MATCH_ROOT . '/public'),
+        new ThreeProgramQuizConfiguration(),
     );
     $adminProgramMedia = new AdminProgramMediaController(
         $config,

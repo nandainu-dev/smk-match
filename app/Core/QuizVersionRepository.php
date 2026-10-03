@@ -91,22 +91,44 @@ final class QuizVersionRepository
     }
 
 
+    public function createDraftSnapshot(int $quizId, QuizDefinition $approvedSnapshot, ?int $sourceVersionId = null): QuizVersion
+    {
+        return $this->createDraftSnapshotInternal($quizId, $approvedSnapshot, $sourceVersionId, null);
+    }
+
+    /** @param list<int> $selectedProgramIds */
+    public function createDraftSnapshotForProgramIds(int $quizId, QuizDefinition $approvedSnapshot, array $selectedProgramIds): QuizVersion
+    {
+        return $this->createDraftSnapshotInternal($quizId, $approvedSnapshot, null, $selectedProgramIds);
+    }
+
     public function createDraftSnapshotFromSourceWithCurrentPresentations(
         int $quizId,
         QuizDefinition $approvedSnapshot,
         int $sourceVersionId,
     ): QuizVersion {
-        return $this->createDraftSnapshot(
+        return $this->createDraftSnapshotInternal(
             $quizId,
             $approvedSnapshot,
             $sourceVersionId,
+            null,
             true,
         );
     }
 
-    public function createDraftSnapshot(int $quizId, QuizDefinition $approvedSnapshot, ?int $sourceVersionId = null, bool $useCurrentProgramPresentations = false): QuizVersion
+    /** @param list<int>|null $selectedProgramIds */
+    private function createDraftSnapshotInternal(
+        int $quizId,
+        QuizDefinition $approvedSnapshot,
+        ?int $sourceVersionId,
+        ?array $selectedProgramIds,
+        bool $useCurrentProgramPresentations = false,
+    ): QuizVersion
     {
         $this->assertPositiveId($quizId, 'Quiz identity');
+        if ($sourceVersionId !== null && $selectedProgramIds !== null) {
+            throw new \InvalidArgumentException('A draft snapshot cannot have both a source version and selected program identities.');
+        }
         $approvedSnapshot->validate();
 
         $connection = $this->connection();
@@ -116,9 +138,11 @@ final class QuizVersionRepository
             $schoolId = $this->lockQuizIdentity($connection, $quizId);
             $this->assertNoEditableDraftLocked($connection, $quizId);
             $versionNumber = $this->nextVersionNumberLocked($connection, $quizId);
-            $programIds = $sourceVersionId === null
-                ? $this->resolveProgramIds($connection, $schoolId, $approvedSnapshot->programs)
-                : $this->resolveSourceProgramIds($connection, $sourceVersionId, $approvedSnapshot->programs);
+            $programIds = $sourceVersionId !== null
+                ? $this->resolveSourceProgramIds($connection, $sourceVersionId, $approvedSnapshot->programs)
+                : ($selectedProgramIds === null
+                    ? $this->resolveProgramIds($connection, $schoolId, $approvedSnapshot->programs)
+                    : $this->resolveProgramIdsByIdentity($connection, $schoolId, $approvedSnapshot->programs, $selectedProgramIds));
 
             $statement = $connection->prepare(
                 'INSERT INTO quiz_versions (quiz_id, version_number, status, name, created_at)
@@ -350,7 +374,25 @@ final class QuizVersionRepository
             'status' => QuizVersion::STATUS_DRAFT,
         ]);
 
-        if ($statement->rowCount() !== 1) {
+        if ($statement->rowCount() === 1) {
+            return;
+        }
+
+        // MySQL reports zero affected rows when a draft keeps its existing
+        // name. Verify that this was a valid no-op rather than weakening the
+        // lifecycle guard for a missing or non-draft version.
+        $verification = $connection->prepare(
+            'SELECT status, name
+             FROM quiz_versions
+             WHERE id = :id
+             FOR UPDATE'
+        );
+        $verification->execute(['id' => $versionId]);
+        $row = $verification->fetch();
+
+        if ($row === false
+            || $this->rowString($row, 'status') !== QuizVersion::STATUS_DRAFT
+            || $this->rowString($row, 'name') !== $name) {
             throw new RuntimeException('Quiz version lifecycle state changed concurrently.');
         }
     }
@@ -417,6 +459,55 @@ final class QuizVersionRepository
             }
 
             $programIds[$code] = $this->rowInt($rows[0], 'id');
+        }
+
+        return $programIds;
+    }
+
+    /**
+     * Resolves the selected mutable catalog rows by immutable primary key. The
+     * snapshot code is retained only as version-owned presentation metadata.
+     *
+     * @param array<string, bool> $programs
+     * @param list<int> $selectedProgramIds
+     * @return array<string, int>
+     */
+    private function resolveProgramIdsByIdentity(PDO $connection, int $schoolId, array $programs, array $selectedProgramIds): array
+    {
+        if (count($selectedProgramIds) !== count($programs) || $selectedProgramIds === [] || count(array_unique($selectedProgramIds, SORT_REGULAR)) !== count($selectedProgramIds)) {
+            throw new \InvalidArgumentException('Selected program identities do not match the draft configuration.');
+        }
+
+        $statement = $connection->prepare(
+            'SELECT id, short_name
+             FROM programs
+             WHERE id = :program_id AND school_id = :school_id
+             FOR UPDATE'
+        );
+        $programIds = [];
+        foreach ($selectedProgramIds as $programId) {
+            if (!is_int($programId) || $programId < 1) {
+                throw new \InvalidArgumentException('Selected program identity is invalid.');
+            }
+            $statement->execute(['program_id' => $programId, 'school_id' => $schoolId]);
+            $row = $statement->fetch();
+            if ($row === false) {
+                throw new RuntimeException('Selected program does not belong to the quiz school.');
+            }
+
+            $code = $this->rowString($row, 'short_name');
+            if (!isset($programs[$code]) || isset($programIds[$code])) {
+                throw new RuntimeException('Selected programs do not match the draft snapshot labels.');
+            }
+            $programIds[$code] = $this->rowInt($row, 'id');
+        }
+
+        $expectedCodes = array_keys($programs);
+        $actualCodes = array_keys($programIds);
+        sort($expectedCodes, SORT_STRING);
+        sort($actualCodes, SORT_STRING);
+        if ($expectedCodes !== $actualCodes) {
+            throw new RuntimeException('Selected programs do not match the draft snapshot labels.');
         }
 
         return $programIds;
