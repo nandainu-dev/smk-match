@@ -52,8 +52,8 @@ expect($health->status === 200 && $healthPayload['status'] === 'ok', 'Health rou
 foreach (['dkv', 'mplb', 'pm', 'tie', 'error'] as $preview) {
     $response = $router->dispatch(new Request('GET', '/result/' . $preview));
     expect($response->status === 200, "Result preview {$preview} did not respond with 200.");
-    expect(str_contains($response->body, 'participant-result.css'), "Result preview {$preview} does not include its stylesheet.");
-    expect(str_contains($response->body, 'participant-result.js'), "Result preview {$preview} does not include its script.");
+    expect(str_contains($response->body, 'participant-result.css?v='), "Result preview {$preview} does not cache-version its stylesheet.");
+    expect(str_contains($response->body, 'participant-result.js?v='), "Result preview {$preview} does not cache-version its script.");
     expect(str_contains($response->body, 'FredokaOne-Regular.ttf') === false, 'Font asset should be declared in local CSS, not duplicated in HTML.');
 
     $payload = resultPayload($response->body);
@@ -108,6 +108,10 @@ expect(isset($nProgramPayload['presentation']['profiles']['OTKP']), 'Result pres
 
 $styleSheet = (string) file_get_contents(SMK_MATCH_ROOT . '/public/assets/css/participant-result.css');
 $script = (string) file_get_contents(SMK_MATCH_ROOT . '/public/assets/js/participant-result.js');
+$shareResultStart = strpos($script, 'async function shareResult(');
+$shareResultEnd = strpos($script, 'function shareImageFrame(', $shareResultStart === false ? 0 : $shareResultStart);
+expect($shareResultStart !== false && $shareResultEnd !== false, 'Native-share handler boundaries are missing.');
+$shareResultHandler = substr($script, $shareResultStart, $shareResultEnd - $shareResultStart);
 expect(str_contains($styleSheet, '/assets/fonts/FredokaOne-Regular.ttf'), 'Result UI does not reuse the local Fredoka font.');
 expect(preg_match('#https?://#', $styleSheet) !== 1, 'Result UI stylesheet loads a remote asset.');
 expect(str_contains($styleSheet, '@media'), 'Result UI lacks responsive styling.');
@@ -116,9 +120,39 @@ expect(!str_contains($script, 'raw_scores'), 'Client script must not process raw
 expect(!str_contains($script, 'weights'), 'Client script must not process option weights.');
 expect(!str_contains($script, 'answers'), 'Client script must not process participant answers.');
 expect(str_contains($script, 'resultEntries()'), 'Client script does not render the generic ranking list.');
+expect(str_contains($script, 'content.append(renderRanking(result));'), 'Participant result detail does not show the stored generic ranking.');
+expect(str_contains($script, 'fill.style.setProperty("background-color", barColor, "important")'), 'Ranking fills do not receive a direct snapshot-color binding.');
+expect(str_contains($script, 'programCode.style.setProperty("color", primaryColor, "important")'), 'Open result program code does not receive a direct snapshot-color binding.');
+expect(str_contains($script, 'applyShareElementColors(programName, programCode, percentage, profile)'), 'Share card does not directly bind the snapshot color to its visible elements.');
+expect(substr_count($script, 'participantName()') >= 5, 'Persisted participant name is not used throughout reveal, detail, share, and finish result screens.');
 expect(!str_contains($script, '.sort('), 'Client script must not sort the server ranking.');
 expect(str_contains($script, 'navigator.share'), 'Result UI does not feature-detect sharing.');
 expect(str_contains($script, 'navigator.clipboard'), 'Result UI does not offer a copy-link fallback.');
+expect(str_contains($script, 'document.execCommand("copy")'), 'Result UI lacks the clipboard fallback for restricted browsers.');
+expect(str_contains($script, 'document.createElement("canvas")') && str_contains($script, '"image/jpeg"'), 'Result UI cannot create a JPEG share card.');
+expect(str_contains($script, 'navigator.canShare') && str_contains($script, 'files: [file]'), 'Result UI does not use native file sharing when available.');
+expect(str_contains($script, 'Jurusan yang cocok untuk anda :'), 'Share card does not include the approved result label.');
+expect(str_contains($script, 'Deskripsi program belum tersedia.'), 'Result detail has no safe missing-description state.');
+expect(str_contains($script, 'resultImagePath(profile)'), 'Result reveal/detail do not use the result-media role.');
+expect(str_contains($script, 'shareImagePath(profile)'), 'Result share card does not use the share-media role.');
+expect(!str_contains($script, 'monitor_image_path'), 'Result UI must not consume monitor media.');
+expect(str_contains($styleSheet, '.pr-share-image-frame') && str_contains($styleSheet, 'object-fit: cover'), 'Share card image is not rendered as a covered rounded rectangle.');
+expect(str_contains($styleSheet, 'background-color: var(--program-color);'), 'Ranking bars do not preserve their program snapshot colors.');
+expect(str_contains($script, 'resolvedMonitorProgramColor(programProfile)'), 'Each result-progress row must use the same primary-color selection as Monitor.');
+expect(!str_contains($script, 'programProfile?.primary_color || themeProfile?.primary_color'), 'Result progress must not fall back to the dominant color for another program row.');
+expect(str_contains($script, 'applyShareCardColors(card, isTie ? null : profile);'), 'Share card does not receive its dominant snapshot color.');
+expect(str_contains($script, 'const candidate = typeof profile?.primary_color === "string" ? profile.primary_color.trim() : "";'), 'Result UI does not resolve the monitor primary_color snapshot field.');
+expect(str_contains($styleSheet, 'color: var(--share-program-color'), 'Share card program name does not use its snapshot primary color.');
+expect(str_contains($styleSheet, 'background: var(--share-program-color);'), 'Share card percentage does not use its snapshot primary color.');
+expect(str_contains($script, 'contrastTextColor(primary)'), 'Canvas JPEG percentage does not use a readable contrast color.');
+expect(str_contains($script, 'window.isSecureContext !== true'), 'Native sharing is not restricted to secure contexts.');
+expect(str_contains($script, 'Bagikan langsung belum tersedia pada koneksi HTTP lokal.'), 'HTTP local share feedback is missing.');
+expect(str_contains($script, 'navigator.share({ files: [file], title: "Hasil SMK Match", text })'), 'Native file sharing is not implemented.');
+expect(str_contains($script, 'await navigator.share({ title: "Hasil SMK Match", text });'), 'Text native-share fallback is missing.');
+expect(str_contains($script, 'error?.name === "AbortError"'), 'Share cancellation is not handled.');
+expect(!str_contains($shareResultHandler, 'downloadBlob('), 'Share action must never fall back to a JPG download.');
+expect(str_contains($script, 'function saveShareCard(') && str_contains($script, 'downloadBlob(blob, shareCardFilename());'), 'Save card must remain the only JPG download action.');
+expect(!preg_match('/\b(?:DKV|MPLB|PM)\b/', $script), 'Result client must not hardcode program identities.');
 expect(str_contains($styleSheet, 'prefers-reduced-motion'), 'Result UI does not support reduced motion.');
 
 $previewUrl = 'http://127.0.0.1:8080/result/dkv';

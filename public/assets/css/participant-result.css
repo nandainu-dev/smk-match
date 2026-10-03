@@ -15,11 +15,12 @@
 }
 
 body.participant-result-page {
-    min-width: 320px;
+    width: 100%;
+    overflow-x: hidden;
     min-height: 100vh;
     margin: 0;
-    color: #1f2937;
-    background: #fef3c7;
+    color: #2d1b69;
+    background: #fff8f0;
     font-family: "Fredoka", system-ui, sans-serif;
     font-synthesis: none;
 }
@@ -44,17 +45,17 @@ a:focus-visible {
 }
 
 .pr-shell {
-    --result-primary: #7c3aed;
+    --result-primary: #2d1b69;
     --result-accent: #ec4899;
     min-height: 100vh;
-    overflow: hidden;
 }
 
 .pr-screen {
-    width: min(100%, 760px);
+    width: 100%;
+    max-width: 393px;
     min-height: 100vh;
     margin: 0 auto;
-    padding: 28px 20px 42px;
+    padding: clamp(20px, 7vw, 28px) clamp(16px, 5vw, 20px) calc(32px + env(safe-area-inset-bottom));
 }
 
 .pr-reveal,
@@ -64,22 +65,44 @@ a:focus-visible {
     min-height: 100vh;
     color: #fff;
     text-align: center;
-    background:
-        radial-gradient(circle at 50% 32%, color-mix(in srgb, var(--result-accent) 48%, transparent), transparent 33rem),
-        linear-gradient(150deg, #111827, #312e81 58%, #172554);
+    position: relative;
+    background: #110a30;
 }
 
 .pr-error {
-    background:
-        radial-gradient(circle at 50% 32%, rgba(124, 58, 237, .58), transparent 33rem),
-        linear-gradient(150deg, #111827, #312e81 58%, #172554);
+    background: #110a30;
+}
+
+.pr-reveal::before,
+.pr-reveal::after {
+    position: absolute;
+    width: 42px;
+    height: 42px;
+    border: 4px solid var(--result-accent);
+    border-radius: 12px;
+    content: "";
+    transform: rotate(24deg);
+}
+
+.pr-reveal::before {
+    top: 10%;
+    left: 8%;
+}
+
+.pr-reveal::after {
+    right: 9%;
+    bottom: 15%;
+    border-color: #bfff00;
+    border-radius: 50%;
 }
 
 .pr-reveal-card,
 .pr-error-card {
     display: grid;
     justify-items: center;
-    width: min(100%, 490px);
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     gap: 16px;
 }
 
@@ -98,8 +121,10 @@ a:focus-visible {
     min-height: 34px;
     padding: 7px 13px;
     border-radius: 999px;
-    color: #172554;
-    background: #d9f99d;
+    color: #2d1b69;
+    background: #bfff00;
+    border: 2px solid #2d1b69;
+    box-shadow: 0 3px 0 #2d1b69;
 }
 
 .pr-personality {
@@ -111,10 +136,12 @@ a:focus-visible {
 
 .pr-code {
     margin: -4px 0 0;
-    color: var(--result-accent);
-    font-size: clamp(4.7rem, 21vw, 8rem);
-    line-height: .84;
-    text-shadow: 0 6px 0 color-mix(in srgb, var(--result-primary) 48%, #111827);
+    color: var(--result-primary);
+    max-width: 100%;
+    font-size: clamp(3.1rem, 18vw, 4.7rem);
+    line-height: .9;
+    text-shadow: 0 0 10px var(--result-primary), 0 0 24px var(--result-accent), 0 6px 0 #2d1b69;
+    overflow-wrap: anywhere;
 }
 
 .pr-program-name,
@@ -127,34 +154,41 @@ a:focus-visible {
 .pr-program-name {
     max-width: 30rem;
     font-size: clamp(1.1rem, 4.3vw, 1.55rem);
+    overflow-wrap: anywhere;
 }
 
 .pr-mascot-orb {
     display: grid;
     place-items: center;
-    width: min(64vw, 302px);
+    width: min(62vw, 250px);
+    max-width: 100%;
     aspect-ratio: 1;
-    border: 7px solid color-mix(in srgb, var(--result-accent) 75%, #fff);
+    border: 5px solid #fff;
     border-radius: 50%;
-    background: color-mix(in srgb, var(--result-primary) 42%, #fff);
-    box-shadow: 0 16px 0 color-mix(in srgb, var(--result-primary) 45%, #111827);
+    background: var(--result-accent);
+    box-shadow: 0 12px 0 #2d1b69;
+    overflow: hidden;
 }
 
 .pr-mascot-orb img {
-    width: 118%;
-    height: 118%;
-    object-fit: contain;
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    object-fit: cover;
 }
 
 .pr-participant {
     color: #d9f99d;
-    font-size: 1.05rem;
+    margin-top: 10px;
+    font-size: clamp(1.3rem, 5vw, 1.7rem);
+    line-height: 1.2;
 }
 
 .pr-tagline {
     max-width: 29rem;
     color: #e0e7ff;
     line-height: 1.55;
+    overflow-wrap: anywhere;
 }
 
 .pr-actions {
@@ -163,42 +197,46 @@ a:focus-visible {
     justify-content: center;
     gap: 12px;
     margin-top: 8px;
+    width: 100%;
 }
 
 .pr-button {
     min-height: 48px;
     padding: 12px 20px;
-    border: 2px solid transparent;
-    border-radius: 15px;
-    color: #172554;
+    border: 3px solid #2d1b69;
+    border-radius: 17px;
+    color: #2d1b69;
     background: #fff;
-    box-shadow: 0 4px 0 rgba(15, 23, 42, .3);
+    box-shadow: 0 5px 0 #2d1b69;
+    max-width: 100%;
+    overflow-wrap: anywhere;
     transition: transform .16s ease, box-shadow .16s ease;
 }
 
 .pr-button:hover {
     transform: translateY(-2px);
-    box-shadow: 0 6px 0 rgba(15, 23, 42, .3);
+    box-shadow: 0 7px 0 #2d1b69;
 }
 
 .pr-button:active {
     transform: translateY(2px);
-    box-shadow: 0 2px 0 rgba(15, 23, 42, .3);
+    box-shadow: 0 2px 0 #2d1b69;
 }
 
 .pr-button--primary {
-    color: #fff;
-    background: var(--result-accent);
+    color: #2d1b69;
+    background: #bfff00;
 }
 
 .pr-button--lime {
-    color: #172554;
-    background: #d9f99d;
+    color: #2d1b69;
+    background: #bfff00;
 }
 
 .pr-button--outline {
-    border-color: #cbd5e1;
-    color: #1e293b;
+    border-color: #2d1b69;
+    color: #2d1b69;
+    background: #fff;
 }
 
 .pr-button:disabled {
@@ -210,14 +248,14 @@ a:focus-visible {
 .pr-detail,
 .pr-share,
 .pr-finish {
-    background: #fff7df;
+    background: #fff8f0;
 }
 
 .pr-detail-head,
 .pr-section-title,
 .pr-share-title,
 .pr-finish-title {
-    color: #1e293b;
+    color: #2d1b69;
 }
 
 .pr-detail-head {
@@ -228,6 +266,11 @@ a:focus-visible {
     margin-bottom: 25px;
 }
 
+.pr-detail-head > * {
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
 .pr-detail-head--tie {
     grid-template-columns: 1fr;
     text-align: center;
@@ -236,9 +279,10 @@ a:focus-visible {
 .pr-mini-mascot {
     width: 70px;
     height: 70px;
-    object-fit: contain;
+    object-fit: cover;
     border-radius: 50%;
-    background: color-mix(in srgb, var(--result-primary) 15%, #fff);
+    border: 3px solid #2d1b69;
+    background: var(--result-accent);
 }
 
 .pr-detail-head h1,
@@ -258,10 +302,12 @@ a:focus-visible {
 .pr-panel {
     margin: 16px 0;
     padding: 20px;
-    border: 2px solid #312e81;
-    border-radius: 24px;
+    border: 3px solid #2d1b69;
+    border-radius: 22px;
     background: #fff;
-    box-shadow: 0 5px 0 #312e81;
+    box-shadow: 0 6px 0 #2d1b69;
+    width: 100%;
+    max-width: 100%;
 }
 
 .pr-section-title {
@@ -285,24 +331,35 @@ a:focus-visible {
     gap: 14px;
     color: #334155;
     font-size: .9rem;
+    min-width: 0;
+}
+
+.pr-ranking-label > span {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .pr-ranking-label strong {
     color: #0f172a;
+    flex: 0 0 auto;
 }
 
 .pr-meter {
+    width: 100%;
+    max-width: 100%;
     height: 14px;
     overflow: hidden;
     border-radius: 999px;
-    background: #e2e8f0;
+    border: 2px solid #2d1b69;
+    background: #fff8f0;
 }
 
 .pr-meter > span {
     display: block;
     height: 100%;
     border-radius: inherit;
-    background: var(--program-color, var(--result-primary));
+    background-color: var(--program-color);
 }
 
 .pr-copy {
@@ -312,8 +369,8 @@ a:focus-visible {
 }
 
 .pr-superpower {
-    border-color: #bef264;
-    background: #d9f99d;
+    border-color: #2d1b69;
+    background: #bfff00;
 }
 
 .pr-superpower p {
@@ -337,9 +394,12 @@ a:focus-visible {
 .pr-tie-list li {
     padding: 8px 11px;
     border-radius: 999px;
-    color: #312e81;
-    background: #ede9fe;
+    color: #2d1b69;
+    background: #fff8f0;
+    border: 2px solid #2d1b69;
     font-size: .84rem;
+    max-width: 100%;
+    overflow-wrap: anywhere;
 }
 
 .pr-career-list {
@@ -349,9 +409,10 @@ a:focus-visible {
 
 .pr-career-list li {
     padding: 11px 13px;
-    border-left: 5px solid var(--result-accent);
-    border-radius: 7px;
-    background: #f8fafc;
+    border: 2px solid #2d1b69;
+    border-left: 7px solid var(--result-accent);
+    border-radius: 10px;
+    background: #fff8f0;
 }
 
 .pr-tie-profile-grid {
@@ -362,7 +423,7 @@ a:focus-visible {
 
 .pr-tie-profile {
     padding: 16px;
-    border: 2px solid #312e81;
+    border: 3px solid #2d1b69;
     border-radius: 18px;
 }
 
@@ -388,36 +449,67 @@ a:focus-visible {
 .pr-share-card {
     display: grid;
     gap: 12px;
-    max-width: 430px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     margin: 0 auto;
     padding: 23px;
-    border: 4px solid var(--result-primary);
+    border: 4px solid #2d1b69;
     border-radius: 27px;
-    background: #fff;
-    box-shadow: 11px 11px 0 var(--result-accent);
-    transform: rotate(-1.5deg);
+    background: linear-gradient(145deg, #fff 0%, #fff8f0 68%, var(--result-accent) 220%);
+    box-shadow: 6px 6px 0 var(--result-accent);
 }
 
-.pr-share-card > * {
-    transform: rotate(1.5deg);
+.pr-share-image-frame {
+    width: 100%;
+    height: clamp(160px, 48vw, 230px);
+    overflow: hidden;
+    border: 3px solid #2d1b69;
+    border-radius: 22px;
+    background: var(--result-accent);
+    box-shadow: 0 5px 0 var(--result-primary);
 }
 
-.pr-share-card img {
-    width: min(63vw, 210px);
-    height: 170px;
-    margin: 0 auto;
-    object-fit: contain;
+.pr-share-image-frame img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.pr-share-name,
+.pr-share-label,
+.pr-share-card p {
+    margin: 0;
+}
+
+.pr-share-name {
+    color: #2d1b69;
+    font-size: clamp(1.4rem, 6vw, 1.85rem);
+}
+
+.pr-share-label {
+    color: #475569;
+    font-size: .93rem;
+}
+
+.pr-share-program {
+    margin: 0;
+    color: var(--share-program-color);
+    font-size: clamp(2rem, 8.5vw, 2.65rem);
+    line-height: 1.05;
+    overflow-wrap: anywhere;
 }
 
 .pr-share-code {
+    justify-self: center;
     margin: 0;
-    color: var(--result-accent);
-    font-size: clamp(3.5rem, 18vw, 5rem);
-    line-height: .9;
-}
-
-.pr-share-card p {
-    margin: 0;
+    padding: 5px 11px;
+    border: 2px solid var(--share-program-color);
+    border-radius: 999px;
+    color: var(--share-program-contrast);
+    background: var(--share-program-color);
+    font-size: .84rem;
 }
 
 .pr-share-percent {
@@ -425,8 +517,10 @@ a:focus-visible {
     justify-content: center;
     padding: 7px 14px;
     border-radius: 999px;
-    color: #365314;
-    background: #d9f99d;
+    color: var(--share-program-contrast);
+    background: var(--share-program-color);
+    border: 2px solid #2d1b69;
+    font-size: clamp(1.4rem, 7vw, 2rem);
 }
 
 .pr-share-feedback {
@@ -435,11 +529,6 @@ a:focus-visible {
     color: #475569;
 }
 
-.pr-share-note {
-    margin: 0;
-    color: #64748b;
-    font-size: .86rem;
-}
 
 .pr-finish {
     display: grid;
@@ -451,7 +540,9 @@ a:focus-visible {
     display: grid;
     justify-items: center;
     gap: 16px;
-    width: min(100%, 490px);
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
 }
 
 .pr-medal {
@@ -459,15 +550,15 @@ a:focus-visible {
     place-items: center;
     width: 96px;
     height: 96px;
-    border: 7px solid #facc15;
+    border: 5px solid #2d1b69;
     border-radius: 50%;
-    background: #fef08a;
-    box-shadow: 0 8px 0 #eab308;
+    background: #bfff00;
+    box-shadow: 0 8px 0 #2d1b69;
     font-size: 3rem;
 }
 
 .pr-finish-card img {
-    width: min(82vw, 345px);
+    width: min(100%, 300px);
     max-height: 230px;
     object-fit: contain;
 }
@@ -482,6 +573,7 @@ a:focus-visible {
     margin: 0;
     color: #475569;
     line-height: 1.55;
+    overflow-wrap: anywhere;
 }
 
 .pr-error-card h1 {
@@ -504,6 +596,17 @@ a:focus-visible {
 
     .pr-tie-profile-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 480px) {
+    .pr-actions {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .pr-actions .pr-button {
+        width: 100%;
     }
 }
 

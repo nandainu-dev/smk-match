@@ -57,7 +57,7 @@ function adminHistoryXlsxResetSession(): void
 /** @param array<string, mixed> $query */
 function adminHistoryXlsxRequest(array $query = []): Request
 {
-    return new Request('GET', '/admin/history/export.xlsx', [], '', [], false, $query);
+    return new Request('GET', '/admin/history/export', [], '', [], false, $query);
 }
 
 function adminHistoryXlsxWorkbook(string $body): \PhpOffice\PhpSpreadsheet\Spreadsheet
@@ -93,10 +93,10 @@ function adminHistoryXlsxParticipantNames(\PhpOffice\PhpSpreadsheet\Spreadsheet 
 {
     $names = [];
     foreach ($workbook->getSheet(0)->toArray() as $index => $row) {
-        if ($index === 0 || !isset($row[0]) || !is_string($row[0])) {
+        if ($index === 0 || !isset($row[2]) || !is_string($row[2])) {
             continue;
         }
-        $names[] = $row[0];
+        $names[] = $row[2];
     }
 
     return $names;
@@ -277,13 +277,14 @@ try {
 
     $workbook = adminHistoryXlsxWorkbook($response->body);
     adminHistoryXlsxAssert($workbook->getSheetNames() === ['Participants', 'Results', 'Program Summary'], 'Workbook sheet names are incorrect.');
-    adminHistoryXlsxAssert(adminHistoryXlsxRowValues($workbook->getSheet(0), 1, 6) === [
-        'Participant name',
-        'Campaign name',
-        'Batch number',
-        'Batch label',
-        'Attempt status',
-        'Attempt created at',
+    adminHistoryXlsxAssert(adminHistoryXlsxRowValues($workbook->getSheet(0), 1, 7) === [
+        'No',
+        'Tanggal',
+        'Nama Peserta',
+        'Smp Dwiguna',
+        'Kelas',
+        'Nomor Telepon',
+        'Jurusan',
     ], 'Participants header is incorrect.');
     adminHistoryXlsxAssert(adminHistoryXlsxRowValues($workbook->getSheet(1), 1, 12) === [
         'Participant name',
@@ -305,7 +306,7 @@ try {
         'Dominant count',
         'Average normalized percentage',
     ], 'Program Summary header is incorrect.');
-    adminHistoryXlsxAssert($workbook->getSheet(0)->getCell('A2')->getValue() === 'Export Participant', 'Participants sheet lacks filtered participant data.');
+    adminHistoryXlsxAssert(adminHistoryXlsxRowValues($workbook->getSheet(0), 2, 7) === [1, '2026-01-01 17:00:00', 'Export Participant', 'Private Origin', 'XII', '08123456789', 'Alpha Snapshot, Gamma Snapshot'], 'Participants sheet does not preserve the approved historical row contract.');
     adminHistoryXlsxAssert($workbook->getSheet(1)->getCell('H2')->getValue() === 'ALPHA, GAMMA', 'Tie-safe outcome programs were not exported.');
     adminHistoryXlsxAssert($workbook->getSheet(1)->getCell('I2')->getValue() === 1 && $workbook->getSheet(1)->getCell('J2')->getValue() === 'ALPHA', 'Persisted ranking order was not exported.');
     adminHistoryXlsxAssert($workbook->getSheet(2)->getCell('A2')->getValue() === 'ALPHA' && $workbook->getSheet(2)->getCell('B2')->getValue() === 'Alpha Snapshot', 'Snapshot-backed summary was not exported.');
@@ -314,7 +315,7 @@ try {
         $workbook->getSheet(1)->toArray(),
         $workbook->getSheet(2)->toArray(),
     ], JSON_THROW_ON_ERROR);
-    foreach (['08123456789', 'Private Origin', 'marketing_consent', 'visitor_uuid', 'attempt_uuid', 'responses'] as $forbidden) {
+    foreach (['marketing_consent', 'visitor_uuid', 'attempt_uuid', 'responses'] as $forbidden) {
         adminHistoryXlsxAssert(!str_contains($serializedWorkbook, $forbidden), 'XLSX response leaked sensitive data: ' . $forbidden);
     }
     $workbook->disconnectWorksheets();

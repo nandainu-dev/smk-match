@@ -82,7 +82,7 @@ final class PublicParticipantStartController
         ], $outcome->alreadyStarted ? 200 : 201, $visitor['set_cookie']);
     }
 
-    /** @return array{full_name: string, origin_school: ?string, class_name: ?string, phone: ?string, marketing_consent: bool} */
+    /** @return array{full_name: string, origin_school: ?string, class_name: ?string, phone: string, marketing_consent: bool} */
     private function payload(string $body): array
     {
         $trimmedBody = trim($body);
@@ -106,7 +106,7 @@ final class PublicParticipantStartController
         }
 
         $optionalFields = [];
-        foreach (['origin_school', 'class_name', 'phone'] as $field) {
+        foreach (['origin_school', 'class_name'] as $field) {
             $value = $payload[$field] ?? null;
             if ($value !== null && !is_string($value)) {
                 throw new \InvalidArgumentException('Optional identity fields must be strings or null.');
@@ -114,13 +114,31 @@ final class PublicParticipantStartController
             $optionalFields[$field] = $value;
         }
 
+        $phone = $payload['phone'] ?? null;
+        if (!is_string($phone) || !$this->isValidIndonesianWhatsapp($phone)) {
+            throw new \InvalidArgumentException('A valid WhatsApp number is required.');
+        }
+
         return [
             'full_name' => $payload['full_name'],
             'origin_school' => $optionalFields['origin_school'],
             'class_name' => $optionalFields['class_name'],
-            'phone' => $optionalFields['phone'],
+            'phone' => $phone,
             'marketing_consent' => $payload['marketing_consent'],
         ];
+    }
+
+    private function isValidIndonesianWhatsapp(string $phone): bool
+    {
+        if (preg_match('/^08[0-9]{8,11}$/', $phone) !== 1 || preg_match('/^([0-9])\1+$/', $phone) === 1) {
+            return false;
+        }
+
+        $subscriberNumber = substr($phone, 2);
+
+        return !str_contains($subscriberNumber, '123456789')
+            && !str_contains($subscriberNumber, '987654321')
+            && preg_match('/^([0-9]{2})(?:\1){3,4}$/', $subscriberNumber) !== 1;
     }
 
     private function acceptsJson(?string $contentType): bool

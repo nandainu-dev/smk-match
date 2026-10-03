@@ -22,12 +22,13 @@ final class AdminHistoryXlsxExporter
             $participants = $spreadsheet->getActiveSheet();
             $participants->setTitle('Participants');
             $this->writeSheet($participants, [
-                'Participant name',
-                'Campaign name',
-                'Batch number',
-                'Batch label',
-                'Attempt status',
-                'Attempt created at',
+                'No',
+                'Tanggal',
+                'Nama Peserta',
+                'Smp Dwiguna',
+                'Kelas',
+                'Nomor Telepon',
+                'Jurusan',
             ], $this->participantRows($report['rows']));
 
             $results = $spreadsheet->createSheet();
@@ -115,8 +116,16 @@ final class AdminHistoryXlsxExporter
     private function participantRows(array $reportRows): array
     {
         $rows = [];
-        foreach ($reportRows as $row) {
-            $rows[] = $this->context($row);
+        foreach ($reportRows as $index => $row) {
+            $rows[] = [
+                $index + 1,
+                $row['attempt_created_at'],
+                $row['participant_name'],
+                $row['origin_school'] ?? '',
+                $row['class_name'] ?? '',
+                $row['phone'] ?? '',
+                $this->participantOutcomeProgramNames($row['outcome']),
+            ];
         }
 
         return $rows;
@@ -186,6 +195,22 @@ final class AdminHistoryXlsxExporter
 
         return implode(', ', array_map(
             static fn (array $program): string => $program['code'],
+            $outcome['tied_programs'],
+        ));
+    }
+
+    /** @param ?array{kind: string, dominant_program: ?array{code: string, name: string}, tied_programs: list<array{code: string, name: string}>} $outcome */
+    private function participantOutcomeProgramNames(?array $outcome): string
+    {
+        if ($outcome === null) {
+            return 'Belum selesai';
+        }
+        if ($outcome['kind'] === 'decisive') {
+            return $outcome['dominant_program']['name'];
+        }
+
+        return implode(', ', array_map(
+            static fn (array $program): string => $program['name'],
             $outcome['tied_programs'],
         ));
     }

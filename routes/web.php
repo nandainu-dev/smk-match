@@ -231,7 +231,7 @@ return static function (Config $config): Router {
     $router->get('/admin/program-media', static fn (Request $request): Response => $adminProgramMedia->index($request));
     $router->get('/admin/campaigns', static fn (Request $request): Response => $adminCampaigns->index($request));
     $router->get('/admin/history', static fn (Request $request): Response => $adminCampaigns->history($request));
-    $router->get('/admin/history/export.xlsx', static fn (Request $request): Response => $adminCampaigns->export($request));
+    $router->get('/admin/history/export', static fn (Request $request): Response => $adminCampaigns->export($request));
     $router->get('/admin/analytics', static fn (Request $request): Response => $adminAnalytics->index($request));
     $router->postPattern(
         '/admin/login',

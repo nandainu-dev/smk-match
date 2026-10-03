@@ -14,7 +14,7 @@ final class AdminHistoryReadRepository
 
     /**
      * @return array{
-     *     rows: list<array{participant_name: string, attempt_created_at: string, attempt_status: string, campaign_name: string, batch_number: ?int, batch_label: ?string, outcome: ?array{kind: string, dominant_program: ?array{code: string, name: string}, tied_programs: list<array{code: string, name: string}>}, ranking: list<array{display_order: int, normalized_percentage: float, program: array{code: string, name: string}}>}>,
+     *     rows: list<array<string, mixed>>,
      *     summary: list<array{code: string, name: string, dominant_count: int, score_average_percentage: float}>
      * }
      */
@@ -37,7 +37,7 @@ final class AdminHistoryReadRepository
         $statement = $this->connection()->prepare(
             'SELECT a.id AS attempt_id, a.quiz_version_id, a.created_at AS attempt_created_at,
                     a.status AS attempt_status, c.name AS campaign_name, cb.batch_number,
-                    cb.label AS batch_label, p.full_name AS participant_name, r.id AS result_id,
+                    cb.label AS batch_label, p.full_name AS participant_name, p.origin_school, p.class_name, p.phone, r.id AS result_id,
                     r.is_tie, r.dominant_program_id
              FROM attempts AS a
              INNER JOIN campaigns AS c ON c.id = a.campaign_id
@@ -62,6 +62,9 @@ final class AdminHistoryReadRepository
 
             $rows[] = [
                 'participant_name' => $this->nullableString($row, 'participant_name') ?? 'Peserta',
+                'origin_school' => $this->nullableString($row, 'origin_school'),
+                'class_name' => $this->nullableString($row, 'class_name'),
+                'phone' => $this->nullableString($row, 'phone'),
                 'attempt_created_at' => $this->string($row, 'attempt_created_at'),
                 'attempt_status' => $this->string($row, 'attempt_status'),
                 'campaign_name' => $this->string($row, 'campaign_name'),

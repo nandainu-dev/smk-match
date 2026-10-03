@@ -18,6 +18,10 @@
 
     const realMode = config.mode === 'real';
     const alias = typeof config.alias === 'string' ? config.alias : '';
+    const configuredQuestionCount = Number.isInteger(config.question_count) && config.question_count > 0
+        ? config.question_count
+        : null;
+    const presentationPrograms = Array.isArray(config.presentation_programs) ? config.presentation_programs : [];
     let questions = realMode ? [] : (Array.isArray(config.questions) ? config.questions : []);
     const state = {
         screen: 'LANDING',
@@ -90,8 +94,24 @@
     };
 
     const optionalValue = (value) => typeof value === 'string' && value.trim() !== '' ? value.trim() : null;
+    const validWhatsapp = (value) => {
+        const phone = typeof value === 'string' ? value.trim() : '';
+
+        if (!/^08[0-9]{8,11}$/.test(phone) || /^([0-9])\1+$/.test(phone)) {
+            return false;
+        }
+
+        const subscriberNumber = phone.slice(2);
+        return !subscriberNumber.includes('123456789')
+            && !subscriberNumber.includes('987654321')
+            && !/^([0-9]{2})(?:\1){3,4}$/.test(subscriberNumber);
+    };
     const validQuestionImagePath = (value) => typeof value === 'string'
         && /^\/uploads\/questions\/[a-f0-9]{64}\.(?:jpg|jpeg|png|webp)$/.test(value);
+    const validPresentationImagePath = (value) => typeof value === 'string'
+        && (/^\/assets\/[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(value)
+            || /^\/uploads\/programs\/[a-f0-9]{64}\.(?:jpg|jpeg|png|webp)$/.test(value));
+    const allowedColor = (value) => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
 
     const showError = (message, retry = null, canStartNewSession = false) => {
         state.errorMessage = message;
@@ -251,7 +271,7 @@
                     full_name: state.identity.fullName.trim(),
                     origin_school: optionalValue(state.identity.originSchool),
                     class_name: optionalValue(state.identity.className),
-                    phone: optionalValue(state.identity.whatsapp),
+                    phone: state.identity.whatsapp.trim(),
                     marketing_consent: state.identity.marketingConsent,
                 }),
             });
@@ -307,6 +327,36 @@
         });
     };
 
+    const programCards = () => {
+        const cards = element('div', 'pq-program-cards');
+
+        presentationPrograms.forEach((program) => {
+            if (!program || typeof program !== 'object' || typeof program.code !== 'string'
+                || typeof program.display_name !== 'string') {
+                return;
+            }
+
+            const card = element('article', 'pq-program-card');
+            const image = element('img', 'pq-program-card__mascot');
+            const label = element('span', 'pq-program-card__label', program.code);
+            const name = element('span', 'pq-program-card__name', program.display_name);
+            const color = allowedColor(program.primary_color) ? program.primary_color : null;
+
+            if (color) {
+                card.style.setProperty('--program-card-color', color);
+            }
+            image.src = validPresentationImagePath(program.mascot_path)
+                ? program.mascot_path
+                : '/assets/mascots/mascot-all.png';
+            image.alt = '';
+            image.loading = 'eager';
+            card.append(image, label, name);
+            cards.append(card);
+        });
+
+        return cards.childElementCount > 0 ? cards : null;
+    };
+
     const setState = (nextState) => {
         if (analysisTimer !== null) {
             window.clearTimeout(analysisTimer);
@@ -320,7 +370,13 @@
         const view = screen('pq-screen--centered');
         addDoodles(view);
 
-        view.append(element('span', 'pq-kicker pq-kicker--lime', realMode ? 'Kuis pilihanmu' : `${questions.length} soal`));
+        const badges = element('div', 'pq-landing-badges');
+        badges.append(
+            element('span', 'pq-kicker pq-kicker--lime', 'TEBAK JURUSANMU'),
+            element('span', 'pq-kicker pq-kicker--cyan', '± 2 menit'),
+            element('span', 'pq-kicker pq-kicker--pink', 'Personality quiz'),
+        );
+        view.append(badges);
 
         const heading = element('h1', 'pq-heading');
         heading.append('Jurusan apa yang ');
@@ -329,12 +385,17 @@
         view.append(heading);
         view.append(element('p', 'pq-copy', 'Jawab beberapa pertanyaan seru dan kenali gaya yang paling dekat denganmu.'));
 
-        const art = element('div', 'pq-landing-art');
-        const mascot = element('img', 'pq-mascot-all');
-        mascot.src = '/assets/mascots/mascot-all.png';
-        mascot.alt = 'Ilustrasi maskot SMK Match';
-        art.append(mascot);
-        view.append(art);
+        const cards = programCards();
+        if (cards) {
+            view.append(cards);
+        } else {
+            const art = element('div', 'pq-landing-art');
+            const mascot = element('img', 'pq-mascot-all');
+            mascot.src = '/assets/mascots/mascot-all.png';
+            mascot.alt = 'Ilustrasi maskot SMK Match';
+            art.append(mascot);
+            view.append(art);
+        }
 
         const start = button('Mulai Main ✨');
         start.addEventListener('click', () => setState('IDENTITY'));
@@ -353,6 +414,9 @@
         input.value = state.identity[config.name];
         input.placeholder = config.placeholder;
         input.autocomplete = config.autocomplete;
+        if (config.inputMode) {
+            input.inputMode = config.inputMode;
+        }
         input.required = true;
         input.setAttribute('aria-describedby', `${config.id}-error`);
         input.addEventListener('input', () => {
@@ -380,9 +444,9 @@
         const form = element('form', 'pq-form');
         form.noValidate = true;
         createField(form, { id: 'full-name', name: 'fullName', label: 'Nama', labelClass: 'pq-field-label--pink', placeholder: 'Masukkan namamu', autocomplete: 'name' });
-        createField(form, { id: 'origin-school', name: 'originSchool', label: 'Asal sekolah', labelClass: 'pq-field-label--lime', placeholder: 'SMP mana nih?', autocomplete: 'organization' });
+        createField(form, { id: 'origin-school', name: 'originSchool', label: 'Asal sekolah', labelClass: 'pq-field-label--lime', placeholder: 'Kamu bersekolah dimana', autocomplete: 'organization' });
         createField(form, { id: 'class-name', name: 'className', label: 'Kelas', labelClass: 'pq-field-label--cyan', placeholder: 'Contoh: IX-A', autocomplete: 'organization-title' });
-        createField(form, { id: 'whatsapp', name: 'whatsapp', label: 'WhatsApp', labelClass: 'pq-field-label--pink', placeholder: 'Contoh: 0812 3456 7890', autocomplete: 'tel', type: 'tel' });
+        createField(form, { id: 'whatsapp', name: 'whatsapp', label: 'WhatsApp', labelClass: 'pq-field-label--pink', placeholder: 'Contoh: 081234567890', autocomplete: 'tel', type: 'tel', inputMode: 'numeric' });
 
         const consent = element('label', 'pq-consent');
         const checkbox = element('input');
@@ -407,6 +471,7 @@
             event.preventDefault();
             const fields = realMode ? [
                 ['fullName', 'full-name', 'Nama perlu diisi.'],
+                ['whatsapp', 'whatsapp', 'Nomor WhatsApp perlu diisi.'],
             ] : [
                 ['fullName', 'full-name', 'Nama perlu diisi.'],
                 ['originSchool', 'origin-school', 'Asal sekolah perlu diisi.'],
@@ -427,6 +492,16 @@
             });
             if (firstInvalid) {
                 firstInvalid.focus();
+                return;
+            }
+            if (!validWhatsapp(state.identity.whatsapp)) {
+                const input = document.getElementById('whatsapp');
+                const error = document.getElementById('whatsapp-error');
+                input?.setAttribute('aria-invalid', 'true');
+                if (error) {
+                    error.textContent = 'Gunakan nomor WhatsApp 08xxxxxxxxxx (10–13 digit, angka saja).';
+                }
+                input?.focus();
                 return;
             }
             if (realMode) {
@@ -455,8 +530,7 @@
         const rules = element('ul', 'pq-rules');
         [
             ['◎', 'Tidak ada jawaban benar atau salah.'],
-            ['✦', 'Pilih yang paling menggambarkan dirimu.'],
-            ['✓', 'Jawab semuanya dengan santai.'],
+            ['✦', 'Pilih jawaban yang paling menggambarkan dirimu.'],
         ].forEach(([iconText, copy]) => {
             const item = element('li');
             item.append(element('span', 'pq-rule-icon', iconText), document.createTextNode(copy));
@@ -532,7 +606,7 @@
         const legend = element('legend', 'pq-question', question.text);
         fieldset.append(legend);
 
-        question.options.forEach((option) => {
+        question.options.forEach((option, optionIndex) => {
             const label = element('label', 'pq-option');
             const input = element('input');
             input.type = 'radio';
@@ -545,7 +619,12 @@
             });
             const checkMarker = element('span', 'pq-option__check', '✓');
             checkMarker.setAttribute('aria-hidden', 'true');
-            label.append(input, element('span', '', option.text), checkMarker);
+            const answer = element('span', 'pq-option__answer');
+            answer.append(
+                element('span', 'pq-option__letter', String.fromCharCode(65 + optionIndex)),
+                element('span', 'pq-option__copy', option.text),
+            );
+            label.append(input, answer, checkMarker);
             fieldset.append(label);
         });
         view.append(fieldset);
@@ -584,8 +663,8 @@
 
     const renderAnalyzing = () => {
         const view = screen('pq-screen--centered pq-analyzing');
-        view.append(element('h1', 'pq-heading pq-heading--compact', 'Merangkai langkahmu...'));
-        view.append(element('p', 'pq-copy', 'Sebentar ya, kami menyiapkan perjalanan berikutnya.'));
+        view.append(element('h1', 'pq-heading pq-heading--compact', 'Meramu Hasilmu...'));
+        view.append(element('p', 'pq-copy', 'Sebentar ya, kami sedang merangkai kecenderunganmu.'));
         const loader = element('div', 'pq-loader');
         loader.setAttribute('aria-label', 'Memproses langkah berikutnya');
         loader.setAttribute('role', 'status');
@@ -594,7 +673,7 @@
         const steps = element('ul', 'pq-analysis-steps');
         [
             'Merapikan jawabanmu...',
-            'Menyiapkan langkah berikutnya...',
+            'Meramu kecenderunganmu...',
             'Hampir selesai...',
         ].forEach((copy, index) => {
             const item = element('li');
@@ -614,7 +693,12 @@
         icon.setAttribute('aria-hidden', 'true');
         view.append(icon);
         view.append(element('h1', 'pq-heading pq-heading--compact', 'Kamu sudah selesai!'));
-        view.append(element('p', 'pq-copy', 'Terima kasih sudah bermain. Langkah berikutnya sedang disiapkan untukmu.'));
+        view.append(element('p', 'pq-copy', 'Menampilkan hasilmu...'));
+        if (isUuidV4(state.attemptUuid)) {
+            analysisTimer = window.setTimeout(() => {
+                window.location.assign(`/result/attempt/${encodeURIComponent(state.attemptUuid)}`);
+            }, reducedMotion ? 0 : 180);
+        }
         return view;
     };
 

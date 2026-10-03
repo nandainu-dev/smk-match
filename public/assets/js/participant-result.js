@@ -82,12 +82,12 @@
     function applyTheme(profile) {
         const theme = profile || neutralTheme;
 
-        if (allowedColor.test(theme.primary_color || "")) {
-            mount.style.setProperty("--result-primary", theme.primary_color);
-        }
+        mount.style.setProperty("--result-primary", resolvedMonitorProgramColor(theme));
 
         if (allowedColor.test(theme.accent_color || "")) {
             mount.style.setProperty("--result-accent", theme.accent_color);
+        } else {
+            mount.style.setProperty("--result-accent", neutralTheme.accent_color);
         }
     }
 
@@ -126,7 +126,24 @@
         return typeof profile?.display_name === "string" ? profile.display_name : fallbackCode;
     }
 
-    function renderRanking(result, themeProfile) {
+    function safeImagePath(path) {
+        return typeof path === "string" && (/^\/assets\/[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(path)
+            || /^\/uploads\/programs\/[a-f0-9]{64}\.(?:jpg|jpeg|png|webp)$/.test(path));
+    }
+
+    function resultImagePath(profile) {
+        return safeImagePath(profile?.result_image_path)
+            ? profile.result_image_path
+            : (safeImagePath(profile?.mascot_path) ? profile.mascot_path : "/assets/mascots/mascot-all.png");
+    }
+
+    function shareImagePath(profile) {
+        return safeImagePath(profile?.share_image_path)
+            ? profile.share_image_path
+            : (safeImagePath(profile?.mascot_path) ? profile.mascot_path : "/assets/mascots/mascot-all.png");
+    }
+
+    function renderRanking(result) {
         const panel = createElement("section", "pr-panel");
         const title = createElement("h2", "pr-section-title", "Skor Kecenderunganmu");
         const ranking = createElement("div", "pr-ranking");
@@ -142,11 +159,12 @@
             const percentage = createElement("strong", "", displayPercentage(entry?.percentage));
             const meter = createElement("div", "pr-meter");
             const fill = createElement("span", "");
-            const barColor = programProfile?.primary_color || themeProfile?.primary_color;
+            const barColor = resolvedMonitorProgramColor(programProfile);
 
-            if (allowedColor.test(barColor || "")) {
-                fill.style.setProperty("--program-color", barColor);
-            }
+            fill.style.setProperty("--program-color", barColor);
+            // Bind the immutable snapshot color to the actual painted element.
+            // This keeps every row independent of inherited theme state.
+            fill.style.setProperty("background-color", barColor, "important");
 
             fill.style.width = `${visualPercentage(entry?.percentage)}%`;
             label.append(labelText, percentage);
@@ -173,15 +191,19 @@
         const mascot = createElement("div", "pr-mascot-orb");
         const mascotImage = createElement("img", "");
         const actions = actionRow();
+        const programCode = createElement("h1", "pr-code", profile.code || "");
+        const primaryColor = resolvedMonitorProgramColor(profile);
         const primaryEntry = resultEntries().find((entry) => entry?.program === profile.code);
 
-        mascotImage.src = typeof profile.mascot_path === "string" ? profile.mascot_path : "/assets/mascots/mascot-all.png";
+        programCode.style.setProperty("color", primaryColor, "important");
+        programCode.style.setProperty("text-shadow", `0 0 10px ${primaryColor}, 0 0 24px ${primaryColor}, 0 6px 0 #2d1b69`, "important");
+        mascotImage.src = resultImagePath(profile);
         mascotImage.alt = "Maskot program";
         mascot.append(mascotImage);
         card.append(
             createElement("p", "pr-badge", "Hasil terbuka"),
             createElement("p", "pr-personality", profile.personality_title || ""),
-            createElement("h1", "pr-code", profile.code || ""),
+            programCode,
             createElement("p", "pr-program-name", profileName(profile, "Program")),
             mascot,
             createElement("p", "pr-participant", `Selamat, ${participantName()}!`),
@@ -217,7 +239,7 @@
         card.append(
             createElement("p", "pr-badge", "Hasil terbuka"),
             createElement("p", "pr-personality", "KEKUATANMU SEIMBANG"),
-            createElement("h1", "pr-code", "SETARA"),
+            createElement("h1", "pr-code", "HASILMU"),
             mascot,
             createElement("p", "pr-participant", `Hebat, ${participantName()}!`),
             createElement("p", "pr-tagline", "Lebih dari satu kecenderungan tampil sama kuat. Tidak ada satu program yang dipilih sebagai pemenang."),
@@ -242,7 +264,9 @@
 
         about.append(
             createElement("h2", "pr-section-title", "Tentang Kamu"),
-            createElement("p", "pr-copy", profile.description || ""),
+            createElement("p", "pr-copy", typeof profile.description === "string" && profile.description.trim() !== ""
+                ? profile.description
+                : "Deskripsi program belum tersedia."),
         );
         superpower.append(
             createElement("h2", "pr-section-title", "Superpower"),
@@ -315,17 +339,18 @@
 
         if (isTie) {
             header.append(
-                createElement("h1", "", "Hasilmu seimbang"),
+                createElement("h1", "", "Hasil kecenderunganmu"),
                 createElement("p", "", "Tidak ada program dominan yang dipilih."),
             );
         } else if (profile) {
             const mascot = createElement("img", "pr-mini-mascot");
-            mascot.src = typeof profile.mascot_path === "string" ? profile.mascot_path : "/assets/mascots/mascot-all.png";
+            mascot.src = resultImagePath(profile);
             mascot.alt = "Maskot program";
             const text = createElement("div", "");
             text.append(
                 createElement("h1", "", profileName(profile, "Program")),
                 createElement("p", "", profile.personality_title || ""),
+                createElement("p", "", participantName()),
             );
             header.append(mascot, text);
         } else {
@@ -333,7 +358,7 @@
             return;
         }
 
-        content.append(renderRanking(result, profile || neutralTheme));
+        content.append(renderRanking(result));
 
         if (isTie) {
             renderTieDetails(content, result);
@@ -358,19 +383,278 @@
         return typeof profile?.share_headline === "string" ? profile.share_headline : "Aku mencoba SMK Match!";
     }
 
-    function copyLink(feedback) {
-        if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
-            navigator.clipboard.writeText(window.location.href)
-                .then(() => {
-                    feedback.textContent = "Tautan hasil sudah disalin.";
-                })
-                .catch(() => {
-                    feedback.textContent = "Tautan tidak dapat disalin. Salin dari bilah alamat browser.";
-                });
+    function copyWithFallback(value) {
+        const textarea = document.createElement("textarea");
+        textarea.value = value;
+        textarea.setAttribute("readonly", "");
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.append(textarea);
+        textarea.select();
+        textarea.setSelectionRange(0, textarea.value.length);
+        const copied = document.execCommand("copy");
+        textarea.remove();
+
+        return copied;
+    }
+
+    async function copyLink(feedback) {
+        try {
+            if (navigator.clipboard && typeof navigator.clipboard.writeText === "function") {
+                await navigator.clipboard.writeText(window.location.href);
+            } else if (!copyWithFallback(window.location.href)) {
+                throw new Error("copy_failed");
+            }
+            feedback.textContent = "Tautan hasil sudah disalin. Tautan ini tetap mengikuti sesi hasilmu.";
+        } catch (_error) {
+            feedback.textContent = "Tautan belum dapat disalin. Silakan salin dari bilah alamat browser.";
+        }
+    }
+
+    function shareCardFilename() {
+        const normalizedName = participantName().toLocaleLowerCase("id-ID")
+            .normalize("NFKD")
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "");
+
+        return `hasil-smk-match-${normalizedName || "peserta"}.jpg`;
+    }
+
+    function colorValue(value, fallback) {
+        return allowedColor.test(value || "") ? value : fallback;
+    }
+
+    function resolvedMonitorProgramColor(profile) {
+        const candidate = typeof profile?.primary_color === "string" ? profile.primary_color.trim() : "";
+
+        return colorValue(candidate, neutralTheme.primary_color);
+    }
+
+    function contrastTextColor(backgroundColor) {
+        const normalized = colorValue(backgroundColor, neutralTheme.primary_color).slice(1);
+        const red = Number.parseInt(normalized.slice(0, 2), 16);
+        const green = Number.parseInt(normalized.slice(2, 4), 16);
+        const blue = Number.parseInt(normalized.slice(4, 6), 16);
+        const luminance = ((red * 299) + (green * 587) + (blue * 114)) / 1000;
+
+        return luminance >= 150 ? "#2D1B69" : "#FFFFFF";
+    }
+
+    function applyShareCardColors(card, profile) {
+        const primaryColor = resolvedMonitorProgramColor(profile);
+
+        card.style.setProperty("--share-program-color", primaryColor);
+        card.style.setProperty("--share-program-contrast", contrastTextColor(primaryColor));
+    }
+
+    function applyShareElementColors(programName, programCode, percentage, profile) {
+        const primaryColor = resolvedMonitorProgramColor(profile);
+        const contrastColor = contrastTextColor(primaryColor);
+
+        programName.style.setProperty("color", primaryColor, "important");
+        programCode.style.setProperty("border-color", primaryColor, "important");
+        programCode.style.setProperty("background-color", primaryColor, "important");
+        programCode.style.setProperty("color", contrastColor, "important");
+        percentage.style.setProperty("background-color", primaryColor, "important");
+        percentage.style.setProperty("color", contrastColor, "important");
+    }
+
+    function roundedRect(context, x, y, width, height, radius) {
+        const safeRadius = Math.min(radius, width / 2, height / 2);
+        context.beginPath();
+        context.moveTo(x + safeRadius, y);
+        context.arcTo(x + width, y, x + width, y + height, safeRadius);
+        context.arcTo(x + width, y + height, x, y + height, safeRadius);
+        context.arcTo(x, y + height, x, y, safeRadius);
+        context.arcTo(x, y, x + width, y, safeRadius);
+        context.closePath();
+    }
+
+    function loadShareImage(source) {
+        return new Promise((resolve, reject) => {
+            const image = new Image();
+            image.decoding = "async";
+            image.onload = () => resolve(image);
+            image.onerror = () => reject(new Error("share_image_unavailable"));
+            image.src = source;
+        });
+    }
+
+    function drawCoverImage(context, image, x, y, width, height, radius) {
+        const scale = Math.max(width / image.naturalWidth, height / image.naturalHeight);
+        const renderedWidth = image.naturalWidth * scale;
+        const renderedHeight = image.naturalHeight * scale;
+        const imageX = x + (width - renderedWidth) / 2;
+        const imageY = y + (height - renderedHeight) / 2;
+        context.save();
+        roundedRect(context, x, y, width, height, radius);
+        context.clip();
+        context.drawImage(image, imageX, imageY, renderedWidth, renderedHeight);
+        context.restore();
+    }
+
+    function drawWrappedText(context, text, x, y, maxWidth, lineHeight, maxLines) {
+        const words = String(text).split(/\s+/).filter(Boolean);
+        const lines = [];
+        let line = "";
+        words.forEach((word) => {
+            const candidate = line === "" ? word : `${line} ${word}`;
+            if (context.measureText(candidate).width <= maxWidth || line === "") {
+                line = candidate;
+                return;
+            }
+            lines.push(line);
+            line = word;
+        });
+        if (line !== "") {
+            lines.push(line);
+        }
+        const visibleLines = lines.slice(0, maxLines);
+        visibleLines.forEach((item, index) => context.fillText(item, x, y + (index * lineHeight)));
+        return y + (visibleLines.length * lineHeight);
+    }
+
+    function canvasBlob(canvas) {
+        return new Promise((resolve, reject) => {
+            canvas.toBlob((blob) => {
+                if (blob) {
+                    resolve(blob);
+                    return;
+                }
+                reject(new Error("jpeg_generation_failed"));
+            }, "image/jpeg", 0.92);
+        });
+    }
+
+    async function createShareCardJpeg(profile, isTie) {
+        if (document.fonts && document.fonts.ready) {
+            await document.fonts.ready;
+        }
+
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+        if (!context) {
+            throw new Error("canvas_unavailable");
+        }
+
+        const primary = resolvedMonitorProgramColor(profile);
+        const accent = colorValue(profile?.accent_color, neutralTheme.accent_color);
+        const width = 1080;
+        const height = 1350;
+        const padding = 72;
+        const imageHeight = 500;
+        const primaryEntry = resultEntries().find((entry) => entry?.program === profile?.code);
+        const programName = isTie ? "Kekuatan setara" : profileName(profile, "Program");
+        const percentage = isTie ? "Setara" : displayPercentage(primaryEntry?.percentage);
+        const imageSource = isTie ? "/assets/mascots/mascot-all.png" : shareImagePath(profile);
+        const image = await loadShareImage(imageSource);
+
+        canvas.width = width;
+        canvas.height = height;
+        context.fillStyle = "#110a30";
+        context.fillRect(0, 0, width, height);
+        context.fillStyle = accent;
+        context.beginPath();
+        context.arc(width - 80, 100, 170, 0, Math.PI * 2);
+        context.fill();
+        context.fillStyle = primary;
+        context.beginPath();
+        context.arc(85, height - 100, 190, 0, Math.PI * 2);
+        context.fill();
+        roundedRect(context, padding, padding, width - (padding * 2), height - (padding * 2), 52);
+        context.fillStyle = "#fff8f0";
+        context.fill();
+
+        context.fillStyle = "#2d1b69";
+        context.font = '400 38px "Fredoka", sans-serif';
+        context.fillText("SMK MATCH", padding + 48, padding + 76);
+        context.fillStyle = primary;
+        context.font = '400 58px "Fredoka", sans-serif';
+        context.fillText(participantName(), padding + 48, padding + 152);
+
+        drawCoverImage(context, image, padding + 48, padding + 205, width - (padding * 2) - 96, imageHeight, 38);
+        let textY = padding + 790;
+        context.fillStyle = "#475569";
+        context.font = '400 34px "Fredoka", sans-serif';
+        context.fillText("Jurusan yang cocok untuk anda :", padding + 48, textY);
+        textY += 68;
+        context.fillStyle = primary;
+        context.font = '400 62px "Fredoka", sans-serif';
+        textY = drawWrappedText(context, programName, padding + 48, textY, width - (padding * 2) - 96, 72, 2) + 24;
+        const percentageWidth = Math.max(235, context.measureText(percentage).width + 78);
+        const percentageY = textY + 22;
+        roundedRect(context, padding + 48, percentageY, percentageWidth, 116, 42);
+        context.fillStyle = primary;
+        context.fill();
+        context.fillStyle = contrastTextColor(primary);
+        context.font = '400 76px "Fredoka", sans-serif';
+        context.fillText(percentage, padding + 84, percentageY + 82);
+        context.fillStyle = "#2d1b69";
+        context.font = '400 28px "Fredoka", sans-serif';
+        context.fillText("Temukan potensimu bersama SMK Match", padding + 48, height - padding - 46);
+
+        return canvasBlob(canvas);
+    }
+
+    function downloadBlob(blob, filename) {
+        const anchor = document.createElement("a");
+        const objectUrl = URL.createObjectURL(blob);
+        anchor.href = objectUrl;
+        anchor.download = filename;
+        document.body.append(anchor);
+        anchor.click();
+        anchor.remove();
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+    }
+
+    async function saveShareCard(profile, isTie, feedback) {
+        try {
+            const blob = await createShareCardJpeg(profile, isTie);
+            downloadBlob(blob, shareCardFilename());
+            feedback.textContent = "Kartu hasil JPG sedang diunduh.";
+        } catch (_error) {
+            feedback.textContent = "Kartu hasil belum dapat dibuat. Coba lagi setelah gambar selesai dimuat.";
+        }
+    }
+
+    async function shareResult(profile, isTie, feedback) {
+        if (window.isSecureContext !== true) {
+            feedback.textContent = "Bagikan langsung belum tersedia pada koneksi HTTP lokal. Coba melalui versi HTTPS. Gunakan Simpan kartu jika ingin menyimpan JPG.";
             return;
         }
 
-        feedback.textContent = "Salin tautan dari bilah alamat browser.";
+        try {
+            const blob = await createShareCardJpeg(profile, isTie);
+            const text = shareText(profile, isTie);
+            if (typeof navigator.share !== "function") {
+                feedback.textContent = "Bagikan langsung belum didukung browser ini. Gunakan Simpan kartu untuk menyimpan JPG.";
+                return;
+            }
+
+            if (typeof File === "function") {
+                const file = new File([blob], shareCardFilename(), { type: "image/jpeg" });
+                if (typeof navigator.canShare !== "function" || navigator.canShare({ files: [file] })) {
+                    await navigator.share({ files: [file], title: "Hasil SMK Match", text });
+                    feedback.textContent = "Kartu hasil siap dibagikan.";
+                    return;
+                }
+            }
+            await navigator.share({ title: "Hasil SMK Match", text });
+            feedback.textContent = "Hasil siap dibagikan.";
+        } catch (error) {
+            feedback.textContent = error?.name === "AbortError"
+                ? "Berbagi dibatalkan."
+                : "Hasil belum dapat dibagikan. Coba lagi setelah gambar selesai dimuat.";
+        }
+    }
+
+    function shareImageFrame(source, alt) {
+        const frame = createElement("div", "pr-share-image-frame");
+        const image = createElement("img", "");
+        image.src = source;
+        image.alt = alt;
+        frame.append(image);
+        return frame;
     }
 
     function renderShare() {
@@ -389,49 +673,40 @@
         const feedback = createElement("p", "pr-share-feedback");
         feedback.setAttribute("role", "status");
         feedback.setAttribute("aria-live", "polite");
+        applyShareCardColors(card, isTie ? null : profile);
 
         if (isTie) {
-            const image = createElement("img", "");
-            image.src = "/assets/mascots/mascot-all.png";
-            image.alt = "Maskot SMK Match";
             card.append(
-                image,
-                createElement("p", "pr-eyebrow", "SMK Match"),
-                createElement("h1", "pr-share-code", "SETARA"),
-                createElement("p", "", "Kekuatanmu hadir dalam lebih dari satu arah."),
+                shareImageFrame("/assets/mascots/mascot-all.png", "Maskot SMK Match"),
+                createElement("p", "pr-share-name", participantName()),
+                createElement("p", "pr-share-label", "Jurusan yang cocok untuk anda :"),
+                createElement("h1", "pr-share-program", "Kekuatan setara"),
+                createElement("p", "pr-share-percent", "Setara"),
             );
         } else if (profile) {
-            const image = createElement("img", "");
             const primaryEntry = resultEntries().find((entry) => entry?.program === profile.code);
-            image.src = typeof profile.mascot_path === "string" ? profile.mascot_path : "/assets/mascots/mascot-all.png";
-            image.alt = "Maskot program";
+            const programName = createElement("h1", "pr-share-program", profileName(profile, "Program"));
+            const programCode = createElement("p", "pr-share-code", profile.code || "");
+            const percentage = createElement("p", "pr-share-percent", displayPercentage(primaryEntry?.percentage));
+
             card.append(
-                image,
-                createElement("p", "pr-eyebrow", participantName()),
-                createElement("h1", "pr-share-code", profile.code || ""),
-                createElement("p", "", profile.personality_title || ""),
-                createElement("p", "pr-share-percent", displayPercentage(primaryEntry?.percentage)),
+                shareImageFrame(shareImagePath(profile), "Gambar program"),
+                createElement("p", "pr-share-name", participantName()),
+                createElement("p", "pr-share-label", "Jurusan yang cocok untuk anda :"),
+                programName,
+                programCode,
+                percentage,
             );
+            applyShareElementColors(programName, programCode, percentage, profile);
         } else {
             renderError();
             return;
         }
 
-        if (typeof navigator.share === "function") {
-            actions.append(createButton("Bagikan", "pr-button--primary", () => {
-                navigator.share({
-                    title: "SMK Match",
-                    text: shareText(profile, isTie),
-                    url: window.location.href,
-                }).catch(() => {
-                    feedback.textContent = "Berbagi dibatalkan atau belum tersedia.";
-                });
-            }));
-        }
-
         actions.append(
+            createButton("Bagikan hasil", "pr-button--primary", () => shareResult(profile, isTie, feedback)),
+            createButton("Simpan kartu", "pr-button--outline", () => saveShareCard(profile, isTie, feedback)),
             createButton("Salin tautan", "pr-button--outline", () => copyLink(feedback)),
-            createButton("Simpan kartu", "pr-button--outline", () => {}, true),
         );
 
         share.append(
@@ -439,7 +714,6 @@
             card,
             actions,
             feedback,
-            createElement("p", "pr-share-note", "Simpan kartu belum tersedia pada versi ini."),
             createButton("Selesai", "pr-button--lime", () => renderFinish()),
         );
         mount.replaceChildren(share);
@@ -451,18 +725,21 @@
         const card = createElement("div", "pr-finish-card");
         const mascot = createElement("img", "");
         const actions = actionRow();
+        const result = resultData();
+        const profile = primaryProfile();
 
-        mascot.src = "/assets/mascots/mascot-all.png";
-        mascot.alt = "Maskot SMK Match";
+        mascot.src = result?.is_tie === true ? "/assets/mascots/mascot-all.png" : resultImagePath(profile);
+        mascot.alt = result?.is_tie === true ? "Maskot SMK Match" : "Maskot program";
         actions.append(
-            createButton("Lihat detail", "pr-button--primary", () => renderDetail()),
-            createButton("Bagikan hasil", "pr-button--outline", () => renderShare()),
+            createButton("Kenali Jurusan Lebih Dalam", "pr-button--primary", () => renderDetail()),
+            createButton("Bagikan Hasil Lagi", "pr-button--outline", () => renderShare()),
         );
         card.append(
             createElement("p", "pr-badge", "100% selesai"),
             createElement("div", "pr-medal", "🏆"),
             createElement("h1", "pr-finish-title", "Mission Complete"),
             mascot,
+            createElement("p", "", `Terima kasih, ${participantName()}!`),
             createElement("p", "", "Terima kasih sudah menjelajahi kecenderunganmu bersama SMK Match."),
             actions,
         );
