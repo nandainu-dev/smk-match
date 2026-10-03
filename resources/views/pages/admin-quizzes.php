@@ -71,6 +71,10 @@ ob_start();
                                     <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
                                     <button class="admin-button admin-button--quiet" type="submit">Kloning ke draft</button>
                                 </form>
+                                <form method="post" action="/admin/quizzes/<?= (int) $quiz['id'] ?>/versions/<?= (int) $version['id'] ?>/clone-current-presentations" onsubmit="return confirm('Buat draft dengan soal versi ini dan data program terbaru? Versi sumber tidak akan diubah.')">
+                                    <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
+                                    <button class="admin-button admin-button--quiet" type="submit">Draft + data program terbaru</button>
+                                </form>
                             <?php endif; ?>
                         </div>
                     </article>

@@ -31,6 +31,30 @@ ob_start();
                 <?php endif; ?>
             </div>
 
+
+            <form method="post" action="/admin/programs/<?= (int) $program['id'] ?>/presentation-content">
+                <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
+
+                <label class="admin-field">
+                    <span>Skills utama</span>
+                    <textarea name="skills" maxlength="3000" placeholder="Satu skill per baris"><?= $escape(implode("\n", is_array($program['skills'] ?? null) ? $program['skills'] : [])) ?></textarea>
+                </label>
+
+                <label class="admin-field">
+                    <span>Peluang karir masa depan</span>
+                    <textarea name="careers" maxlength="3000" placeholder="Satu peluang karir per baris"><?= $escape(implode("\n", is_array($program['careers'] ?? null) ? $program['careers'] : [])) ?></textarea>
+                </label>
+
+                <p class="admin-hint">
+                    Konten ini menjadi snapshot ketika draft baru dibuat dengan data program terbaru.
+                    Versi dan batch yang sudah ada tidak berubah.
+                </p>
+
+                <button class="admin-button admin-button--quiet" type="submit">
+                    Simpan skills dan karir
+                </button>
+            </form>
+
             <form method="post" enctype="multipart/form-data" action="/admin/programs/<?= (int) $program['id'] ?>/mascot">
                 <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
                 <label class="admin-field">

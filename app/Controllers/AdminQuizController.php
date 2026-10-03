@@ -108,6 +108,60 @@ final class AdminQuizController
         return $this->redirect('/admin/quizzes/' . $context['quiz']['id'] . '/versions/' . $draft->id . '/edit');
     }
 
+
+    public function cloneVersionWithCurrentPresentations(
+        Request $request,
+        string $quizId,
+        string $versionId,
+    ): Response {
+        $identity = $this->identity($request);
+        if ($identity === null) {
+            return $this->loginRequired();
+        }
+
+        if (!$this->validCsrf($request)) {
+            return new Response(
+                'Permintaan tidak dapat diproses.',
+                403,
+                ['Content-Type' => 'text/plain; charset=utf-8'],
+            );
+        }
+
+        $context = $this->versionContext(
+            $identity['school_id'],
+            $quizId,
+            $versionId,
+        );
+
+        if ($context === null) {
+            return $this->notFound();
+        }
+
+        try {
+            $draft = $this->versionService
+                ->cloneVersionToDraftWithCurrentPresentations(
+                    $context['quiz']['id'],
+                    $context['version']->id,
+                );
+        } catch (\Throwable) {
+            return $this->renderList(
+                $this->quizzes->listQuizzesForSchool(
+                    $identity['school_id'],
+                ),
+                'Draft dengan data program terbaru tidak dapat dibuat.',
+                422,
+            );
+        }
+
+        return $this->redirect(
+            '/admin/quizzes/'
+            . $context['quiz']['id']
+            . '/versions/'
+            . $draft->id
+            . '/edit'
+        );
+    }
+
     public function publish(Request $request, string $quizId, string $versionId): Response
     {
         return $this->transition($request, $quizId, $versionId, 'publish');

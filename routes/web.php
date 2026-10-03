@@ -257,6 +257,10 @@ return static function (Config $config): Router {
         static fn (Request $request, array $parameters): Response => $adminQuizzes->cloneVersion($request, $parameters['quizId'], $parameters['versionId']),
     );
     $router->postPattern(
+        '/admin/quizzes/{quizId}/versions/{versionId}/clone-current-presentations',
+        static fn (Request $request, array $parameters): Response => $adminQuizzes->cloneVersionWithCurrentPresentations($request, $parameters['quizId'], $parameters['versionId']),
+    );
+    $router->postPattern(
         '/admin/quizzes/{quizId}/versions/{versionId}/publish',
         static fn (Request $request, array $parameters): Response => $adminQuizzes->publish($request, $parameters['quizId'], $parameters['versionId']),
     );
@@ -271,6 +275,10 @@ return static function (Config $config): Router {
     $router->postPattern(
         '/admin/programs/{programId}/mascot/remove',
         static fn (Request $request, array $parameters): Response => $adminProgramMedia->remove($request, $parameters['programId']),
+    );
+    $router->postPattern(
+        '/admin/programs/{programId}/presentation-content',
+        static fn (Request $request, array $parameters): Response => $adminProgramMedia->savePresentationContent($request, $parameters['programId']),
     );
     $router->postPattern(
         '/admin/campaigns/{campaignId}/batches/reset',

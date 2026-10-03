@@ -53,6 +53,54 @@ final class ProgramPresentationMediaService
         return $this->programs->clearCurrentMascot($schoolId, $programId);
     }
 
+
+    /** @return array<string, mixed> */
+    public function savePresentationContent(
+        int $schoolId,
+        int $programId,
+        string $skills,
+        string $careers,
+    ): array {
+        $this->assertPositiveId($schoolId, 'School identity');
+        $this->assertPositiveId($programId, 'Program identity');
+
+        return $this->programs->savePresentationContent(
+            $schoolId,
+            $programId,
+            $this->presentationLines($skills),
+            $this->presentationLines($careers),
+        );
+    }
+
+    /** @return list<string> */
+    private function presentationLines(string $value): array
+    {
+        $items = [];
+
+        foreach (preg_split('/\R/u', $value) ?: [] as $line) {
+            $line = trim($line);
+
+            if ($line === '') {
+                continue;
+            }
+
+            if (
+                strlen($line) > 255
+                || str_contains($line, "\0")
+                || str_contains($line, '<')
+                || str_contains($line, '>')
+            ) {
+                throw new \InvalidArgumentException(
+                    'Program presentation entries must be plain text of at most 255 characters.'
+                );
+            }
+
+            $items[$line] = $line;
+        }
+
+        return array_values($items);
+    }
+
     private function assertPositiveId(int $value, string $label): void
     {
         if ($value < 1) {

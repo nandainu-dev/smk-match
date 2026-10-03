@@ -28,6 +28,44 @@ final class AdminProgramMediaController
         return $this->render($this->media->listPrograms($identity['school_id']));
     }
 
+
+    public function savePresentationContent(Request $request, string $programId): Response
+    {
+        $identity = $this->identity($request);
+        if ($identity === null) {
+            return $this->loginRequired();
+        }
+        if (!$this->validCsrf($request)) {
+            return $this->invalidRequest();
+        }
+
+        $program = $this->programForSchool($identity['school_id'], $programId);
+        if ($program === null) {
+            return $this->notFound();
+        }
+
+        $form = $request->formValues();
+        $skills = isset($form['skills']) && is_string($form['skills']) ? $form['skills'] : '';
+        $careers = isset($form['careers']) && is_string($form['careers']) ? $form['careers'] : '';
+
+        try {
+            $this->media->savePresentationContent(
+                $identity['school_id'],
+                (int) $program['id'],
+                $skills,
+                $careers,
+            );
+        } catch (\Throwable) {
+            return $this->render(
+                $this->media->listPrograms($identity['school_id']),
+                'Skills atau peluang karir tidak dapat disimpan.',
+                422,
+            );
+        }
+
+        return $this->redirect('/admin/program-media');
+    }
+
     public function upload(Request $request, string $programId): Response
     {
         $identity = $this->identity($request);

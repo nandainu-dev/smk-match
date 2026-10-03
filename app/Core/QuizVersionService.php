@@ -59,6 +59,46 @@ final class QuizVersionService
         return $this->repository->createDraftSnapshot($quizId, $source->definition(), $sourceVersionId);
     }
 
+
+    public function cloneVersionToDraftWithCurrentPresentations(
+        int $quizId,
+        int $sourceVersionId,
+    ): QuizVersion {
+        $this->assertPositiveId($quizId, 'Quiz identity');
+        $this->assertPositiveId(
+            $sourceVersionId,
+            'Source quiz version identity',
+        );
+
+        $source = $this->requireVersionForQuiz(
+            $quizId,
+            $sourceVersionId,
+        );
+
+        $existingDraft = $this->repository->findDraftForQuiz(
+            $quizId,
+        );
+
+        if ($existingDraft !== null) {
+            if ($existingDraft->quizId !== $quizId) {
+                throw new RuntimeException(
+                    'Persistence invariant violation: draft belongs to another quiz.'
+                );
+            }
+
+            throw new RuntimeException(
+                'An editable draft already exists for this quiz.'
+            );
+        }
+
+        return $this->repository
+            ->createDraftSnapshotFromSourceWithCurrentPresentations(
+                $quizId,
+                $source->definition(),
+                $sourceVersionId,
+            );
+    }
+
     public function publish(
         int $quizId,
         int $versionId,

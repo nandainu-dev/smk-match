@@ -90,7 +90,21 @@ final class QuizVersionRepository
         return (bool) $statement->fetchColumn();
     }
 
-    public function createDraftSnapshot(int $quizId, QuizDefinition $approvedSnapshot, ?int $sourceVersionId = null): QuizVersion
+
+    public function createDraftSnapshotFromSourceWithCurrentPresentations(
+        int $quizId,
+        QuizDefinition $approvedSnapshot,
+        int $sourceVersionId,
+    ): QuizVersion {
+        return $this->createDraftSnapshot(
+            $quizId,
+            $approvedSnapshot,
+            $sourceVersionId,
+            true,
+        );
+    }
+
+    public function createDraftSnapshot(int $quizId, QuizDefinition $approvedSnapshot, ?int $sourceVersionId = null, bool $useCurrentProgramPresentations = false): QuizVersion
     {
         $this->assertPositiveId($quizId, 'Quiz identity');
         $approvedSnapshot->validate();
@@ -119,7 +133,7 @@ final class QuizVersionRepository
 
             $versionId = (int) $connection->lastInsertId();
             $membershipIds = $this->insertProgramMemberships($connection, $versionId, $programIds);
-            if ($sourceVersionId === null) {
+            if ($sourceVersionId === null || $useCurrentProgramPresentations) {
                 $this->createCurrentProgramPresentations($connection, $membershipIds, $programIds);
             } else {
                 $this->copySourcePresentations($sourceVersionId, $membershipIds);
@@ -465,15 +479,44 @@ final class QuizVersionRepository
              FROM programs
              WHERE id = :program_id'
         );
+
+        $careers = $connection->prepare(
+            'SELECT title
+             FROM program_careers
+             WHERE program_id = :program_id
+             ORDER BY sort_order ASC, id ASC'
+        );
+
         foreach ($membershipIds as $programCode => $membershipId) {
             $statement->execute(['program_id' => $programIds[$programCode]]);
             $row = $statement->fetch();
             if ($row === false) {
                 throw new RuntimeException('Configured program disappeared during snapshot creation.');
             }
+
+            $careers->execute([
+                'program_id' => $programIds[$programCode],
+            ]);
+
+            $careerTitles = [];
+
+            foreach ($careers->fetchAll() as $career) {
+                $careerTitles[] = $this->rowString(
+                    $career,
+                    'title',
+                );
+            }
+
+            $careersSnapshot = $careerTitles === []
+                ? null
+                : json_encode(
+                    $careerTitles,
+                    JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE,
+                );
+
             $this->presentations->create(new QuizVersionProgramPresentation(
                 $membershipId,
-                $this->rowString($row, 'short_name'),
+                $programCode,
                 $this->rowString($row, 'name'),
                 $this->nullableRowString($row, 'personality_title'),
                 $this->nullableRowString($row, 'mascot_path'),
@@ -483,7 +526,7 @@ final class QuizVersionRepository
                 $this->nullableRowString($row, 'description'),
                 null,
                 $this->nullableRowString($row, 'skills_json'),
-                null,
+                $careersSnapshot,
                 'version_snapshot',
             ));
         }

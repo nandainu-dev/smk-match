@@ -18,14 +18,14 @@ final class AdminProgramMediaRepository
         $this->assertPositiveId($schoolId, 'School identity');
 
         $statement = $this->connection()->prepare(
-            'SELECT id, name, short_name, mascot_path
+            'SELECT id, name, short_name, mascot_path, skills_json
              FROM programs
              WHERE school_id = :school_id
              ORDER BY sort_order ASC, id ASC'
         );
         $statement->execute(['school_id' => $schoolId]);
 
-        return array_map(fn (array $row): array => $this->program($row), $statement->fetchAll());
+        return array_map(fn (array $row): array => $this->programWithPresentation($row), $statement->fetchAll());
     }
 
     /** @return array{id: int, name: string, code: string, mascot_path: ?string}|null */
@@ -35,14 +35,14 @@ final class AdminProgramMediaRepository
         $this->assertPositiveId($programId, 'Program identity');
 
         $statement = $this->connection()->prepare(
-            'SELECT id, name, short_name, mascot_path
+            'SELECT id, name, short_name, mascot_path, skills_json
              FROM programs
              WHERE id = :program_id AND school_id = :school_id'
         );
         $statement->execute(['program_id' => $programId, 'school_id' => $schoolId]);
         $row = $statement->fetch();
 
-        return $row === false ? null : $this->program($row);
+        return $row === false ? null : $this->programWithPresentation($row);
     }
 
     /** @return array{id: int, name: string, code: string, mascot_path: ?string} */
@@ -164,6 +164,205 @@ final class AdminProgramMediaRepository
     }
 
     /** @param array<string, mixed> $row @return array{id: int, name: string, code: string, mascot_path: ?string} */
+
+    /** @param list<string> $skills @param list<string> $careers @return array<string, mixed> */
+    public function savePresentationContent(
+        int $schoolId,
+        int $programId,
+        array $skills,
+        array $careers,
+    ): array {
+        $this->assertPositiveId($schoolId, 'School identity');
+        $this->assertPositiveId($programId, 'Program identity');
+
+        $skillsJson = json_encode(
+            $skills,
+            JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE,
+        );
+
+        $connection = $this->connection();
+        $connection->beginTransaction();
+
+        try {
+            $lock = $connection->prepare(
+                'SELECT id
+                 FROM programs
+                 WHERE id = :program_id AND school_id = :school_id
+                 FOR UPDATE'
+            );
+
+            $lock->execute([
+                'program_id' => $programId,
+                'school_id' => $schoolId,
+            ]);
+
+            if ($lock->fetch() === false) {
+                throw new \RuntimeException(
+                    'Program does not belong to the authenticated school.'
+                );
+            }
+
+            $update = $connection->prepare(
+                'UPDATE programs
+                 SET skills_json = :skills_json,
+                     updated_at = UTC_TIMESTAMP()
+                 WHERE id = :program_id AND school_id = :school_id'
+            );
+
+            $update->execute([
+                'skills_json' => $skillsJson,
+                'program_id' => $programId,
+                'school_id' => $schoolId,
+            ]);
+
+            $delete = $connection->prepare(
+                'DELETE FROM program_careers
+                 WHERE program_id = :program_id'
+            );
+
+            $delete->execute([
+                'program_id' => $programId,
+            ]);
+
+            $insert = $connection->prepare(
+                'INSERT INTO program_careers (
+                    program_id,
+                    title,
+                    description,
+                    sort_order,
+                    created_at
+                 ) VALUES (
+                    :program_id,
+                    :title,
+                    NULL,
+                    :sort_order,
+                    UTC_TIMESTAMP()
+                 )'
+            );
+
+            foreach ($careers as $order => $career) {
+                $insert->execute([
+                    'program_id' => $programId,
+                    'title' => $career,
+                    'sort_order' => $order,
+                ]);
+            }
+
+            $connection->commit();
+        } catch (\Throwable $throwable) {
+            if ($connection->inTransaction()) {
+                $connection->rollBack();
+            }
+
+            throw $throwable;
+        }
+
+        $program = $this->findProgramForSchool(
+            $schoolId,
+            $programId,
+        );
+
+        if (
+            $program === null
+            || $program['skills'] !== $skills
+            || $program['careers'] !== $careers
+        ) {
+            throw new \RuntimeException(
+                'Program presentation content could not be reloaded.'
+            );
+        }
+
+        return $program;
+    }
+
+    /** @return array<string, mixed> */
+    private function programWithPresentation(array $row): array
+    {
+        $program = $this->program($row);
+
+        $program['skills'] = $this->stringListFromJson(
+            $row['skills_json'] ?? null,
+        );
+
+        $program['careers'] = $this->careersForProgram(
+            (int) $program['id'],
+        );
+
+        return $program;
+    }
+
+    /** @return list<string> */
+    private function careersForProgram(int $programId): array
+    {
+        $statement = $this->connection()->prepare(
+            'SELECT title
+             FROM program_careers
+             WHERE program_id = :program_id
+             ORDER BY sort_order ASC, id ASC'
+        );
+
+        $statement->execute([
+            'program_id' => $programId,
+        ]);
+
+        $careers = [];
+
+        foreach ($statement->fetchAll() as $row) {
+            if (
+                !isset($row['title'])
+                || !is_string($row['title'])
+                || trim($row['title']) === ''
+            ) {
+                throw new \RuntimeException(
+                    'Invalid program career persistence state.'
+                );
+            }
+
+            $careers[] = trim($row['title']);
+        }
+
+        return $careers;
+    }
+
+    /** @return list<string> */
+    private function stringListFromJson(mixed $value): array
+    {
+        if (
+            $value === null
+            || !is_string($value)
+            || trim($value) === ''
+        ) {
+            return [];
+        }
+
+        $decoded = json_decode(
+            $value,
+            true,
+            512,
+            JSON_THROW_ON_ERROR,
+        );
+
+        if (!is_array($decoded)) {
+            throw new \RuntimeException(
+                'Program skills persistence state is invalid.'
+            );
+        }
+
+        $items = [];
+
+        foreach ($decoded as $item) {
+            if (!is_string($item) || trim($item) === '') {
+                throw new \RuntimeException(
+                    'Program skills persistence state is invalid.'
+                );
+            }
+
+            $items[] = trim($item);
+        }
+
+        return $items;
+    }
+
     private function program(array $row): array
     {
         return [
