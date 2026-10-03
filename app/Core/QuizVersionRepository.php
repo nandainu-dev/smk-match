@@ -90,7 +90,6 @@ final class QuizVersionRepository
         return (bool) $statement->fetchColumn();
     }
 
-
     public function createDraftSnapshot(int $quizId, QuizDefinition $approvedSnapshot, ?int $sourceVersionId = null): QuizVersion
     {
         return $this->createDraftSnapshotInternal($quizId, $approvedSnapshot, $sourceVersionId, null);
@@ -566,48 +565,29 @@ final class QuizVersionRepository
     private function createCurrentProgramPresentations(PDO $connection, array $membershipIds, array $programIds): void
     {
         $statement = $connection->prepare(
-            'SELECT short_name, name, personality_title, mascot_path, description, skills_json
+            'SELECT short_name, name, personality_title, mascot_path, result_image_path,
+                    share_image_path, monitor_image_path, description, skills_json
              FROM programs
              WHERE id = :program_id'
         );
-
         $careers = $connection->prepare(
-            'SELECT title
-             FROM program_careers
-             WHERE program_id = :program_id
-             ORDER BY sort_order ASC, id ASC'
+            'SELECT title FROM program_careers WHERE program_id = :program_id ORDER BY sort_order ASC, id ASC'
         );
-
         foreach ($membershipIds as $programCode => $membershipId) {
             $statement->execute(['program_id' => $programIds[$programCode]]);
             $row = $statement->fetch();
             if ($row === false) {
                 throw new RuntimeException('Configured program disappeared during snapshot creation.');
             }
-
-            $careers->execute([
-                'program_id' => $programIds[$programCode],
-            ]);
-
-            $careerTitles = [];
-
-            foreach ($careers->fetchAll() as $career) {
-                $careerTitles[] = $this->rowString(
-                    $career,
-                    'title',
-                );
-            }
-
-            $careersSnapshot = $careerTitles === []
-                ? null
-                : json_encode(
-                    $careerTitles,
-                    JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE,
-                );
-
+            $careers->execute(['program_id' => $programIds[$programCode]]);
+            $careerTitles = array_map(
+                fn (array $career): string => $this->rowString($career, 'title'),
+                $careers->fetchAll(),
+            );
+            $careersSnapshot = $careerTitles === [] ? null : json_encode($careerTitles, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
             $this->presentations->create(new QuizVersionProgramPresentation(
                 $membershipId,
-                $programCode,
+                $this->rowString($row, 'short_name'),
                 $this->rowString($row, 'name'),
                 $this->nullableRowString($row, 'personality_title'),
                 $this->nullableRowString($row, 'mascot_path'),
@@ -619,6 +599,9 @@ final class QuizVersionRepository
                 $this->nullableRowString($row, 'skills_json'),
                 $careersSnapshot,
                 'version_snapshot',
+                $this->nullableRowString($row, 'result_image_path'),
+                $this->nullableRowString($row, 'share_image_path'),
+                $this->nullableRowString($row, 'monitor_image_path'),
             ));
         }
     }

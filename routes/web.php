@@ -35,8 +35,11 @@ use App\Core\Config;
 use App\Core\Database;
 use App\Core\ParticipantRepository;
 use App\Core\ParticipantQuizDeliveryService;
+use App\Core\ParticipantResultService;
 use App\Core\ParticipantStartService;
 use App\Core\MonitorReadRepository;
+use App\Core\MonitorIdentityRepository;
+use App\Core\MonitorIdentityService;
 use App\Core\MonitorService;
 use App\Core\ProgramProvider;
 use App\Core\ProgramMediaStorage;
@@ -46,6 +49,7 @@ use App\Core\QuizAuthoringService;
 use App\Core\QuizProvider;
 use App\Core\QuizVersionRepository;
 use App\Core\QuizVersionProgramRepository;
+use App\Core\QuizVersionProgramPresentationRepository;
 use App\Core\QuizVersionService;
 use App\Core\Request;
 use App\Core\ThreeProgramQuizConfiguration;
@@ -65,6 +69,7 @@ use App\Core\VisitorIdentityCookie;
 /** @return Router */
 return static function (Config $config): Router {
     $router = new Router();
+    $database = new Database($config);
     $participantQuiz = new ParticipantQuizController(
         $config,
         new QuizProvider(new ProgramProvider()),
@@ -72,8 +77,20 @@ return static function (Config $config): Router {
     $participantResult = new ParticipantResultController(
         $config,
         new ResultPresentationFixtureProvider(new ProgramProvider()),
+        new ParticipantResultService(
+            new AttemptRepository($database),
+            new ParticipantRepository($database),
+            new CampaignRepository($database),
+            new CampaignBatchRepository($database),
+            new QuizVersionRepository($database),
+            new QuizVersionProgramRepository($database),
+            new QuizVersionProgramPresentationRepository($database),
+            new ResultRepository($database),
+            new ResultScoreRepository($database),
+            new ResultTiedProgramRepository($database),
+        ),
+        new VisitorIdentityCookie(new UuidV4Generator()),
     );
-    $database = new Database($config);
     $publicCampaignEntry = new PublicCampaignEntryController(
         $config,
         new SmartLinkService(
@@ -117,6 +134,8 @@ return static function (Config $config): Router {
             new CampaignRepository($database),
             new CampaignBatchRepository($database),
         ),
+        new QuizVersionProgramPresentationRepository($database),
+        new QuizVersionRepository($database),
     );
     $publicParticipantSubmit = new PublicParticipantSubmitController(
         new AttemptRepository($database),
@@ -131,6 +150,8 @@ return static function (Config $config): Router {
                 new CampaignBatchRepository($database),
             ),
             new MonitorReadRepository($database),
+            new SmartLinkRepository($database),
+            new MonitorIdentityRepository($database),
         ),
     );
     $publicMonitorPage = new PublicMonitorPageController(
@@ -140,6 +161,8 @@ return static function (Config $config): Router {
             new CampaignRepository($database),
             new CampaignBatchRepository($database),
         ),
+        new SmartLinkRepository($database),
+        new MonitorIdentityRepository($database),
     );
     $adminAuth = new AdminAuthController(
         $config,
@@ -162,6 +185,10 @@ return static function (Config $config): Router {
         new AdminSession(),
         new ProgramPresentationMediaService(
             new AdminProgramMediaRepository($database),
+            new ProgramMediaStorage(SMK_MATCH_ROOT . '/public'),
+        ),
+        new MonitorIdentityService(
+            new MonitorIdentityRepository($database),
             new ProgramMediaStorage(SMK_MATCH_ROOT . '/public'),
         ),
     );
@@ -198,6 +225,10 @@ return static function (Config $config): Router {
     $router->get('/result/pm', static fn (Request $request): Response => $participantResult->preview('pm'));
     $router->get('/result/tie', static fn (Request $request): Response => $participantResult->preview('tie'));
     $router->get('/result/error', static fn (Request $request): Response => $participantResult->preview('error'));
+    $router->getPattern(
+        '/result/attempt/{attemptUuid}',
+        static fn (Request $request, array $parameters): Response => $participantResult->show($request, $parameters['attemptUuid']),
+    );
     $router->getPattern(
         '/go/{alias}',
         static fn (Request $request, array $parameters): Response => $publicCampaignEntry->entry($parameters['alias']),
@@ -279,12 +310,36 @@ return static function (Config $config): Router {
         static fn (Request $request, array $parameters): Response => $adminProgramMedia->remove($request, $parameters['programId']),
     );
     $router->postPattern(
+        '/admin/programs/{programId}/media/{role}',
+        static fn (Request $request, array $parameters): Response => $adminProgramMedia->uploadRole($request, $parameters['programId'], $parameters['role']),
+    );
+    $router->postPattern(
+        '/admin/programs/{programId}/media/{role}/remove',
+        static fn (Request $request, array $parameters): Response => $adminProgramMedia->removeRole($request, $parameters['programId'], $parameters['role']),
+    );
+    $router->postPattern(
+        '/admin/monitor-identity',
+        static fn (Request $request, array $parameters): Response => $adminProgramMedia->saveMonitorIdentity($request),
+    );
+    $router->postPattern(
+        '/admin/programs/{programId}/presentation',
+        static fn (Request $request, array $parameters): Response => $adminProgramMedia->rename($request, $parameters['programId']),
+    );
+    $router->postPattern(
         '/admin/programs/{programId}/presentation-content',
         static fn (Request $request, array $parameters): Response => $adminProgramMedia->savePresentationContent($request, $parameters['programId']),
     );
     $router->postPattern(
         '/admin/campaigns/{campaignId}/batches/reset',
         static fn (Request $request, array $parameters): Response => $adminCampaigns->reset($request, $parameters['campaignId']),
+    );
+    $router->postPattern(
+        '/admin/campaigns/{campaignId}/quiz-versions/{quizVersionId}/activate',
+        static fn (Request $request, array $parameters): Response => $adminCampaigns->activateQuizVersion($request, $parameters['campaignId'], $parameters['quizVersionId']),
+    );
+    $router->postPattern(
+        '/admin/campaigns/{campaignId}/smart-links/{alias}/qr',
+        static fn (Request $request, array $parameters): Response => $adminCampaigns->generateQr($request, $parameters['campaignId'], $parameters['alias']),
     );
     $router->postPattern(
         '/api/public/submit/{attemptUuid}',

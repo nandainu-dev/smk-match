@@ -105,6 +105,68 @@ final class CampaignService
         }, $timestamp);
     }
 
+    /**
+     * Closes the current active batch and starts the next batch with a selected
+     * published version. Historical batches remain linked to their original
+     * immutable version snapshots.
+     */
+    public function activatePublishedQuizVersion(
+        int $campaignId,
+        int $quizVersionId,
+        ?DateTimeImmutable $timestamp = null,
+    ): CampaignBatch {
+        $this->assertPositiveId($campaignId, 'Campaign identity');
+        $this->assertPositiveId($quizVersionId, 'Quiz version identity');
+
+        return $this->withinTransaction(function (DateTimeImmutable $utcTimestamp) use ($campaignId, $quizVersionId): CampaignBatch {
+            $campaign = $this->requireLockedCampaign($campaignId);
+            if ($campaign->status !== self::STATUS_ACTIVE) {
+                throw new RuntimeException('Only active campaigns can activate a quiz version.');
+            }
+            if ($campaign->quizId === null) {
+                throw new RuntimeException('Campaign has no configured quiz context.');
+            }
+
+            $version = $this->quizVersionRepository->findById($quizVersionId);
+            if ($version === null) {
+                throw new RuntimeException('Selected quiz version does not exist.');
+            }
+            if (!$version->isPublished()) {
+                throw new RuntimeException('Selected quiz version must be published.');
+            }
+            if ($version->quizId !== $campaign->quizId) {
+                throw new RuntimeException('Selected quiz version does not belong to the campaign quiz.');
+            }
+            if ($this->quizSchoolId($version->quizId) !== $campaign->schoolId) {
+                throw new RuntimeException('Selected quiz version does not belong to the campaign school.');
+            }
+
+            $activeBatch = $this->campaignBatchRepository->findActiveByCampaignIdForUpdate($campaign->id);
+            if ($activeBatch === null || $activeBatch->status !== CampaignBatch::STATUS_ACTIVE) {
+                throw new RuntimeException('Campaign has no valid active batch to close.');
+            }
+
+            $nextBatchNumber = $this->campaignBatchRepository->getMaxBatchNumber($campaign->id) + 1;
+            if (!$this->campaignBatchRepository->close($activeBatch->id, $utcTimestamp)) {
+                throw new RuntimeException('Active campaign batch changed concurrently.');
+            }
+            if (!$this->campaignRepository->updateQuizVersionId($campaign->id, $version->id)) {
+                throw new RuntimeException('Campaign quiz version changed concurrently.');
+            }
+
+            return $this->campaignBatchRepository->create(
+                $campaign->id,
+                $nextBatchNumber,
+                $version->id,
+                null,
+                CampaignBatch::STATUS_ACTIVE,
+                1,
+                $utcTimestamp,
+                null,
+            );
+        }, $timestamp);
+    }
+
     private function requireLockedCampaign(int $campaignId): Campaign
     {
         $campaign = $this->campaignRepository->findByIdForUpdate($campaignId);

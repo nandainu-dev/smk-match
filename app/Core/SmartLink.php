@@ -12,6 +12,7 @@ final class SmartLink
         public readonly string $name,
         public readonly string $alias,
         public readonly ?string $source,
+        public readonly ?string $qrTargetUrl,
         public readonly bool $isActive,
         public readonly int $scanCount,
         public readonly string $createdAt,
@@ -55,6 +56,10 @@ final class SmartLink
 
         if (self::canonicalAlias($this->alias) !== $this->alias) {
             throw new \InvalidArgumentException('Smart link alias must already be canonical.');
+        }
+
+        if ($this->qrTargetUrl !== null && trim($this->qrTargetUrl) === '') {
+            throw new \InvalidArgumentException('Smart link QR target must not be blank when configured.');
         }
 
         if ($this->scanCount < 0) {

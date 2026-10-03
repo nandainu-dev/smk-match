@@ -24,7 +24,8 @@ final class AdminCampaignService
      *     campaigns: list<Campaign>,
      *     selected_campaign: ?Campaign,
      *     batches: list<CampaignBatch>,
-     *     smart_links: list<array{name: string, alias: string, is_active: bool, target: string}>
+     *     smart_links: list<array{name: string, alias: string, is_active: bool, qr_target_url: ?string, monitor_target: string}>,
+     *     published_versions: list<array{id: int, version_number: int, name: string, status: string}>
      * }
      */
     public function campaignDashboard(int $schoolId, ?int $campaignId): array
@@ -45,6 +46,7 @@ final class AdminCampaignService
                 'selected_campaign' => null,
                 'batches' => [],
                 'smart_links' => [],
+                'published_versions' => [],
             ];
         }
 
@@ -54,7 +56,8 @@ final class AdminCampaignService
                 'name' => $link->name,
                 'alias' => $link->alias,
                 'is_active' => $link->isActive,
-                'target' => $this->smartLinkTarget($link->alias),
+                'qr_target_url' => $link->qrTargetUrl,
+                'monitor_target' => $this->monitorTarget($link->alias),
             ];
         }
 
@@ -63,6 +66,7 @@ final class AdminCampaignService
             'selected_campaign' => $selectedCampaign,
             'batches' => $this->campaigns->listBatchesForCampaign($schoolId, $selectedCampaign->id),
             'smart_links' => $links,
+            'published_versions' => $this->campaigns->listPublishedQuizVersionsForCampaign($schoolId, $selectedCampaign->id),
         ];
     }
 
@@ -76,6 +80,35 @@ final class AdminCampaignService
         }
 
         return $this->campaignService->resetActiveBatch($campaign->id);
+    }
+
+    public function activatePublishedQuizVersion(
+        int $schoolId,
+        int $campaignId,
+        int $quizVersionId,
+        string $confirmation,
+    ): CampaignBatch {
+        $this->assertPositiveId($schoolId, 'School identity');
+        $campaign = $this->requireCampaign($schoolId, $campaignId);
+        $this->assertPositiveId($quizVersionId, 'Quiz version identity');
+
+        if ($confirmation !== 'AKTIFKAN') {
+            throw new \InvalidArgumentException('Quiz version activation confirmation is required.');
+        }
+
+        return $this->campaignService->activatePublishedQuizVersion($campaign->id, $quizVersionId);
+    }
+
+    public function generateQrTarget(int $schoolId, int $campaignId, string $alias, string $baseUrl): string
+    {
+        $this->assertPositiveId($schoolId, 'School identity');
+        $campaign = $this->requireCampaign($schoolId, $campaignId);
+        $canonicalAlias = SmartLink::canonicalAlias($alias);
+        $base = $this->canonicalQrBaseUrl($baseUrl);
+        $target = $base . '/go/' . rawurlencode($canonicalAlias);
+        $saved = $this->campaigns->saveSmartLinkQrTarget($schoolId, $campaign->id, $canonicalAlias, $target);
+
+        return $saved->qrTargetUrl ?? throw new RuntimeException('Smart link QR target was not persisted.');
     }
 
     /**
@@ -145,9 +178,36 @@ final class AdminCampaignService
         return $campaign;
     }
 
-    private function smartLinkTarget(string $alias): string
+    private function monitorTarget(string $alias): string
     {
-        return rtrim($this->config->string('APP_URL'), '/') . '/go/' . rawurlencode(SmartLink::canonicalAlias($alias));
+        return $this->config->publicBaseUrl() . '/monitor/' . rawurlencode(SmartLink::canonicalAlias($alias));
+    }
+
+    private function canonicalQrBaseUrl(string $value): string
+    {
+        $base = trim($value);
+        if ($base === '') {
+            throw new \InvalidArgumentException('QR base URL is required.');
+        }
+
+        $parts = parse_url($base);
+        if (!is_array($parts)
+            || !isset($parts['scheme'], $parts['host'])
+            || !is_string($parts['scheme'])
+            || !is_string($parts['host'])
+            || !in_array(strtolower($parts['scheme']), ['http', 'https'], true)
+            || $parts['host'] === ''
+            || isset($parts['user'], $parts['pass'], $parts['query'], $parts['fragment'])
+            || (isset($parts['path']) && $parts['path'] !== '' && $parts['path'] !== '/')) {
+            throw new \InvalidArgumentException('QR base URL must be an absolute HTTP or HTTPS origin.');
+        }
+
+        $port = isset($parts['port']) ? (int) $parts['port'] : null;
+        if ($port !== null && ($port < 1 || $port > 65535)) {
+            throw new \InvalidArgumentException('QR base URL port is invalid.');
+        }
+
+        return strtolower($parts['scheme']) . '://' . strtolower($parts['host']) . ($port === null ? '' : ':' . $port);
     }
 
     /** @return array{0: ?string, 1: ?string} */

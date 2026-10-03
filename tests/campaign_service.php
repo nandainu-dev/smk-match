@@ -9,6 +9,7 @@ use App\Core\CampaignRepository;
 use App\Core\CampaignService;
 use App\Core\Config;
 use App\Core\Database;
+use App\Core\MonitorReadRepository;
 use App\Core\QuizVersionRepository;
 
 const TEST_DATABASE = 'smk_match_g10_r4_test';
@@ -94,7 +95,7 @@ function createQuizVersionSnapshot(
     int $versionNumber,
     string $status,
     string $name,
-    int $programId,
+    array $programIds,
 ): int {
     $versionStatement = $connection->prepare(
         'INSERT INTO quiz_versions (quiz_id, version_number, status, name, created_at)
@@ -107,12 +108,14 @@ function createQuizVersionSnapshot(
         'name' => $name,
     ]);
     $versionId = (int) $connection->lastInsertId();
-    $connection->exec(
-        "INSERT INTO quiz_version_programs (quiz_version_id, program_id, created_at)
-         VALUES ({$versionId}, {$programId}, UTC_TIMESTAMP())"
-    );
-    $membershipId = (int) $connection->lastInsertId();
-    $connection->exec("INSERT INTO quiz_version_program_presentations (quiz_version_program_id, program_code_snapshot, program_name_snapshot, personality_title_snapshot, mascot_path_snapshot, description_snapshot, skills_snapshot, snapshot_provenance, created_at, updated_at) SELECT {$membershipId}, short_name, name, personality_title, mascot_path, description, skills_json, 'version_snapshot', UTC_TIMESTAMP(), UTC_TIMESTAMP() FROM programs WHERE id = {$programId}");
+    foreach ($programIds as $programId) {
+        $connection->exec(
+            "INSERT INTO quiz_version_programs (quiz_version_id, program_id, created_at)
+             VALUES ({$versionId}, {$programId}, UTC_TIMESTAMP())"
+        );
+        $membershipId = (int) $connection->lastInsertId();
+        $connection->exec("INSERT INTO quiz_version_program_presentations (quiz_version_program_id, program_code_snapshot, program_name_snapshot, personality_title_snapshot, mascot_path_snapshot, monitor_image_path_snapshot, description_snapshot, skills_snapshot, snapshot_provenance, created_at, updated_at) SELECT {$membershipId}, short_name, name, personality_title, mascot_path, monitor_image_path, description, skills_json, 'version_snapshot', UTC_TIMESTAMP(), UTC_TIMESTAMP() FROM programs WHERE id = {$programId}");
+    }
     $connection->exec(
         "INSERT INTO questions (quiz_version_id, prompt, sort_order, created_at, updated_at)
          VALUES ({$versionId}, 'Fixture question {$versionId}', 1, UTC_TIMESTAMP(), UTC_TIMESTAMP())"
@@ -127,7 +130,7 @@ function createQuizVersionSnapshot(
     $optionId = (int) $connection->lastInsertId();
     $connection->exec(
         "INSERT INTO option_weights (question_option_id, program_id, weight, created_at)
-         VALUES ({$optionId}, {$programId}, 1, UTC_TIMESTAMP())"
+         VALUES ({$optionId}, {$programIds[0]}, 1, UTC_TIMESTAMP())"
     );
 
     return $versionId;
@@ -207,9 +210,19 @@ try {
     $schoolB = (int) $connection->lastInsertId();
     $connection->exec(
         "INSERT INTO programs (school_id, name, short_name, created_at, updated_at)
-         VALUES ({$schoolA}, 'Service Program A', 'SERVICE_A', UTC_TIMESTAMP(), UTC_TIMESTAMP())"
+         VALUES ({$schoolA}, 'DKV', 'DKV', UTC_TIMESTAMP(), UTC_TIMESTAMP())"
     );
     $programA = (int) $connection->lastInsertId();
+    $connection->exec(
+        "INSERT INTO programs (school_id, name, short_name, created_at, updated_at)
+         VALUES ({$schoolA}, 'MPLB', 'MPLB', UTC_TIMESTAMP(), UTC_TIMESTAMP())"
+    );
+    $programMplb = (int) $connection->lastInsertId();
+    $connection->exec(
+        "INSERT INTO programs (school_id, name, short_name, created_at, updated_at)
+         VALUES ({$schoolA}, 'PM', 'PM', UTC_TIMESTAMP(), UTC_TIMESTAMP())"
+    );
+    $programPm = (int) $connection->lastInsertId();
     $connection->exec(
         "INSERT INTO programs (school_id, name, short_name, created_at, updated_at)
          VALUES ({$schoolB}, 'Service Program B', 'SERVICE_B', UTC_TIMESTAMP(), UTC_TIMESTAMP())"
@@ -231,11 +244,25 @@ try {
     );
     $quizC = (int) $connection->lastInsertId();
 
-    $publishedVersionOne = createQuizVersionSnapshot($connection, $quizA, 1, 'published', 'Published version one', $programA);
-    $publishedVersionTwo = createQuizVersionSnapshot($connection, $quizA, 2, 'published', 'Published version two', $programA);
-    $draftVersion = createQuizVersionSnapshot($connection, $quizA, 3, 'draft', 'Draft version', $programA);
-    $wrongQuizVersion = createQuizVersionSnapshot($connection, $quizB, 1, 'published', 'Other quiz version', $programA);
-    $wrongSchoolVersion = createQuizVersionSnapshot($connection, $quizC, 1, 'published', 'Other school version', $programB);
+    $publishedVersionOne = createQuizVersionSnapshot($connection, $quizA, 1, 'published', 'Published version one', [$programA, $programMplb, $programPm]);
+    $updateMonitorImage = $connection->prepare('UPDATE programs SET monitor_image_path = :path WHERE id = :id');
+    foreach ([
+        $programA => '/uploads/programs/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png',
+        $programMplb => '/uploads/programs/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.png',
+        $programPm => '/uploads/programs/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.png',
+    ] as $programId => $path) {
+        $updateMonitorImage->execute(['path' => $path, 'id' => $programId]);
+    }
+    $publishedVersionTwo = createQuizVersionSnapshot($connection, $quizA, 2, 'published', 'Published version two', [$programA, $programMplb, $programPm]);
+    foreach ([$programA, $programMplb, $programPm] as $programId) {
+        $updateMonitorImage->execute([
+            'path' => '/uploads/programs/dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd.png',
+            'id' => $programId,
+        ]);
+    }
+    $draftVersion = createQuizVersionSnapshot($connection, $quizA, 3, 'draft', 'Draft version', [$programA]);
+    $wrongQuizVersion = createQuizVersionSnapshot($connection, $quizB, 1, 'published', 'Other quiz version', [$programA]);
+    $wrongSchoolVersion = createQuizVersionSnapshot($connection, $quizC, 1, 'published', 'Other school version', [$programB]);
 
     $campaignRepository = new CampaignRepository($database);
     $batchRepository = new CampaignBatchRepository($database);
@@ -265,6 +292,70 @@ try {
     expectCampaignServiceRuntime(
         static fn () => $service->activateCampaign($validCampaignId, $activationTime),
         'Already active campaign activation was accepted.',
+    );
+
+    $versionSwitchCampaignId = createCampaignServiceFixtureCampaign(
+        $connection,
+        $schoolA,
+        $quizA,
+        $publishedVersionOne,
+        'Version switch campaign',
+    );
+    $versionSwitchFirstBatch = $service->activateCampaign($versionSwitchCampaignId, $activationTime);
+    $versionSwitchBatch = $service->activatePublishedQuizVersion($versionSwitchCampaignId, $publishedVersionTwo, $resetTime);
+    $versionSwitchOldBatch = $batchRepository->findById($versionSwitchFirstBatch->id);
+    $versionSwitchMonitor = (new MonitorReadRepository($database))->readActiveBatch($versionSwitchCampaignId);
+    $versionSwitchSnapshots = $connection->query(
+        'SELECT qvpp.program_code_snapshot, qvpp.monitor_image_path_snapshot
+         FROM quiz_version_programs AS qvp
+         INNER JOIN quiz_version_program_presentations AS qvpp ON qvpp.quiz_version_program_id = qvp.id
+         WHERE qvp.quiz_version_id = ' . $publishedVersionTwo
+    )->fetchAll(PDO::FETCH_KEY_PAIR);
+    $versionSwitchMonitorPaths = [];
+    if ($versionSwitchMonitor !== null) {
+        foreach ($versionSwitchMonitor['programs'] as $program) {
+            $versionSwitchMonitorPaths[$program['code']] = $program['monitor_image_path'];
+        }
+    }
+    campaignServiceAssert(
+        $versionSwitchOldBatch !== null
+            && $versionSwitchOldBatch->status === CampaignBatch::STATUS_CLOSED
+            && $versionSwitchOldBatch->activeMarker === null
+            && $versionSwitchOldBatch->quizVersionId === $publishedVersionOne
+            && $versionSwitchBatch->status === CampaignBatch::STATUS_ACTIVE
+            && $versionSwitchBatch->activeMarker === 1
+            && $versionSwitchBatch->batchNumber === 2
+            && $versionSwitchBatch->quizVersionId === $publishedVersionTwo
+            && $campaignRepository->findById($versionSwitchCampaignId)?->quizVersionId === $publishedVersionTwo
+            && countCampaignBatchesForService($connection, $versionSwitchCampaignId) === 2
+            && countActiveCampaignBatchesForService($connection, $versionSwitchCampaignId) === 1
+            && $versionSwitchSnapshots === [
+                'DKV' => '/uploads/programs/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png',
+                'MPLB' => '/uploads/programs/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.png',
+                'PM' => '/uploads/programs/cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.png',
+            ]
+            && $versionSwitchMonitor !== null
+            && $versionSwitchMonitor['batch']['quiz_version_id'] === $publishedVersionTwo
+            && $versionSwitchMonitorPaths === $versionSwitchSnapshots,
+        'Published quiz version activation did not preserve the old batch and create the selected active batch.',
+    );
+    expectCampaignServiceRuntime(
+        static fn () => $service->activatePublishedQuizVersion($versionSwitchCampaignId, $draftVersion, $resetTime),
+        'Quiz version activation accepted a draft version.',
+    );
+    campaignServiceAssert(
+        $campaignRepository->findById($versionSwitchCampaignId)?->quizVersionId === $publishedVersionTwo
+            && $batchRepository->findById($versionSwitchBatch->id)?->status === CampaignBatch::STATUS_ACTIVE
+            && countCampaignBatchesForService($connection, $versionSwitchCampaignId) === 2,
+        'Rejected quiz version activation did not roll back completely.',
+    );
+    expectCampaignServiceRuntime(
+        static fn () => $service->activatePublishedQuizVersion($versionSwitchCampaignId, $wrongQuizVersion, $resetTime),
+        'Quiz version activation accepted a version from another quiz.',
+    );
+    expectCampaignServiceRuntime(
+        static fn () => $service->activatePublishedQuizVersion($versionSwitchCampaignId, $wrongSchoolVersion, $resetTime),
+        'Quiz version activation accepted a version from another school.',
     );
 
     $nullVersionCampaignId = createCampaignServiceFixtureCampaign($connection, $schoolA, $quizA, null, 'Null version campaign');
@@ -384,6 +475,36 @@ try {
             && countCampaignBatchesForService($connection, $overflowCampaignId) === 1
             && countActiveCampaignBatchesForService($connection, $overflowCampaignId) === 1,
         'Failed reset did not roll back the closed old batch and partial new batch.',
+    );
+
+    $activationOverflowCampaignId = createCampaignServiceFixtureCampaign($connection, $schoolA, $quizA, $publishedVersionOne, 'Version activation rollback campaign');
+    campaignServiceAssert(
+        $campaignRepository->updateStatus($activationOverflowCampaignId, 'draft', 'active'),
+        'Version activation rollback fixture campaign could not be made active.',
+    );
+    $activationMaximumBatch = $batchRepository->create(
+        $activationOverflowCampaignId,
+        4294967295,
+        $publishedVersionOne,
+        null,
+        CampaignBatch::STATUS_ACTIVE,
+        1,
+        $activationTime,
+        null,
+    );
+    expectCampaignServicePdoException(
+        static fn () => $service->activatePublishedQuizVersion($activationOverflowCampaignId, $publishedVersionTwo, $resetTime),
+        'Version activation did not fail when the next batch number exceeded INT UNSIGNED.',
+    );
+    $restoredActivationMaximumBatch = $batchRepository->findById($activationMaximumBatch->id);
+    campaignServiceAssert(
+        $restoredActivationMaximumBatch !== null
+            && $restoredActivationMaximumBatch->status === CampaignBatch::STATUS_ACTIVE
+            && $restoredActivationMaximumBatch->activeMarker === 1
+            && $restoredActivationMaximumBatch->quizVersionId === $publishedVersionOne
+            && $campaignRepository->findById($activationOverflowCampaignId)?->quizVersionId === $publishedVersionOne
+            && countCampaignBatchesForService($connection, $activationOverflowCampaignId) === 1,
+        'Failed quiz version activation did not roll back the campaign version and original active batch.',
     );
 
     echo "Campaign service integration tests passed.\n";

@@ -96,6 +96,38 @@ final class AdminCampaignRepository
         return $row === false ? null : $this->batch($row);
     }
 
+    /** @return list<array{id: int, version_number: int, name: string, status: string}> */
+    public function listPublishedQuizVersionsForCampaign(int $schoolId, int $campaignId): array
+    {
+        $this->assertPositiveId($schoolId, 'School identity');
+        $this->assertPositiveId($campaignId, 'Campaign identity');
+
+        $statement = $this->connection()->prepare(
+            'SELECT qv.id, qv.version_number, qv.name, qv.status
+             FROM quiz_versions AS qv
+             INNER JOIN quizzes AS q ON q.id = qv.quiz_id
+             INNER JOIN campaigns AS c ON c.quiz_id = q.id
+             WHERE c.id = :campaign_id
+               AND c.school_id = :campaign_school_id
+               AND q.school_id = :quiz_school_id
+               AND qv.status = :published_status
+             ORDER BY qv.version_number DESC, qv.id DESC'
+        );
+        $statement->execute([
+            'campaign_id' => $campaignId,
+            'campaign_school_id' => $schoolId,
+            'quiz_school_id' => $schoolId,
+            'published_status' => QuizVersion::STATUS_PUBLISHED,
+        ]);
+
+        return array_map(fn (array $row): array => [
+            'id' => $this->positiveInt($row, 'id'),
+            'version_number' => $this->positiveInt($row, 'version_number'),
+            'name' => $this->string($row, 'name'),
+            'status' => $this->string($row, 'status'),
+        ], $statement->fetchAll());
+    }
+
     /** @return list<SmartLink> */
     public function listSmartLinksForCampaign(int $schoolId, int $campaignId): array
     {
@@ -104,7 +136,7 @@ final class AdminCampaignRepository
 
         $statement = $this->connection()->prepare(
             'SELECT sl.id, sl.school_id, sl.campaign_id, sl.name, sl.alias, sl.source,
-                    sl.is_active, sl.scan_count, sl.created_at, sl.updated_at
+                    sl.qr_target_url, sl.is_active, sl.scan_count, sl.created_at, sl.updated_at
              FROM smart_links AS sl
              INNER JOIN campaigns AS c ON c.id = sl.campaign_id
              WHERE sl.campaign_id = :campaign_id
@@ -119,6 +151,63 @@ final class AdminCampaignRepository
         ]);
 
         return array_map(fn (array $row): SmartLink => $this->smartLink($row), $statement->fetchAll());
+    }
+
+    public function findSmartLinkForCampaign(int $schoolId, int $campaignId, string $alias): ?SmartLink
+    {
+        $this->assertPositiveId($schoolId, 'School identity');
+        $this->assertPositiveId($campaignId, 'Campaign identity');
+        $canonicalAlias = SmartLink::canonicalAlias($alias);
+
+        $statement = $this->connection()->prepare(
+            'SELECT sl.id, sl.school_id, sl.campaign_id, sl.name, sl.alias, sl.source,
+                    sl.qr_target_url, sl.is_active, sl.scan_count, sl.created_at, sl.updated_at
+             FROM smart_links AS sl
+             INNER JOIN campaigns AS c ON c.id = sl.campaign_id
+             WHERE sl.school_id = :smart_link_school_id
+               AND c.school_id = :campaign_school_id
+               AND sl.campaign_id = :campaign_id
+               AND sl.alias = :alias'
+        );
+        $statement->execute([
+            'smart_link_school_id' => $schoolId,
+            'campaign_school_id' => $schoolId,
+            'campaign_id' => $campaignId,
+            'alias' => $canonicalAlias,
+        ]);
+        $row = $statement->fetch();
+
+        return $row === false ? null : $this->smartLink($row);
+    }
+
+    public function saveSmartLinkQrTarget(int $schoolId, int $campaignId, string $alias, string $target): SmartLink
+    {
+        $link = $this->findSmartLinkForCampaign($schoolId, $campaignId, $alias);
+        if ($link === null) {
+            throw new RuntimeException('Smart link was not found.');
+        }
+
+        $statement = $this->connection()->prepare(
+            'UPDATE smart_links
+             SET qr_target_url = :target,
+                 updated_at = UTC_TIMESTAMP()
+             WHERE id = :id
+               AND school_id = :school_id
+               AND campaign_id = :campaign_id'
+        );
+        $statement->execute([
+            'target' => $target,
+            'id' => $link->id,
+            'school_id' => $schoolId,
+            'campaign_id' => $campaignId,
+        ]);
+
+        $saved = $this->findSmartLinkForCampaign($schoolId, $campaignId, $link->alias);
+        if ($saved === null) {
+            throw new RuntimeException('Smart link QR target could not be reloaded.');
+        }
+
+        return $saved;
     }
 
     private function connection(): PDO
@@ -171,6 +260,7 @@ final class AdminCampaignRepository
             $this->string($row, 'name'),
             $this->string($row, 'alias'),
             $this->nullableString($row, 'source'),
+            $this->nullableString($row, 'qr_target_url'),
             $this->bool($row, 'is_active'),
             $this->nonNegativeInt($row, 'scan_count'),
             $this->string($row, 'created_at'),

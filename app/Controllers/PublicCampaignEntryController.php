@@ -18,9 +18,12 @@ final class PublicCampaignEntryController
     public function entry(string $alias): Response
     {
         try {
-            $this->smartLinks->resolve($alias);
+            $resolution = $this->smartLinks->resolve($alias);
 
-            return $this->render(true, 200);
+            return new Response('', 302, [
+                'Location' => '/play/' . rawurlencode($resolution->alias),
+                'Cache-Control' => 'no-store, max-age=0',
+            ]);
         } catch (\Throwable) {
             return $this->render(false, 404);
         }

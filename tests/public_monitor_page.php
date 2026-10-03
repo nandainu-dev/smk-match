@@ -4,6 +4,7 @@ declare(strict_types=1);
 require dirname(__DIR__) . '/app/bootstrap.php';
 
 use App\Core\Config;
+use App\Core\AdminCampaignRepository;
 use App\Core\Database;
 use App\Core\Request;
 use App\Core\SmartLinkRepository;
@@ -73,15 +74,35 @@ try {
     publicMonitorPageAssert($response->status === 200, 'Monitor shell route did not render.');
     publicMonitorPageAssert(($response->headers['Content-Type'] ?? null) === 'text/html; charset=utf-8', 'Monitor shell content type is invalid.');
     preg_match_all('/data-monitor-slide="([^"]+)"/', $response->body, $matches);
-    publicMonitorPageAssert($matches[1] === ['overview', 'dkv', 'mplb', 'pm'], 'Monitor shell slide identities are invalid.');
+    publicMonitorPageAssert($matches[1] === ['overview', 'program-1', 'program-2', 'program-3'], 'Monitor shell slide identities are invalid.');
     publicMonitorPageAssert(substr_count($response->body, 'data-monitor-slide=') === 4, 'Monitor shell must contain exactly four slides.');
+    publicMonitorPageAssert(
+        !str_contains($response->body, 'data-monitor-program-code')
+            && !str_contains($response->body, '>DKV<')
+            && !str_contains($response->body, '>MPLB<')
+            && !str_contains($response->body, '>PM<'),
+        'Monitor shell hardcodes demo program identities.',
+    );
     publicMonitorPageAssert(str_contains($response->body, 'class="monitor-sidebar"') && str_contains($response->body, 'data-monitor-qr-code') && str_contains($response->body, 'monitor-activity-list'), 'Monitor sidebar structure is missing.');
+    publicMonitorPageAssert(str_contains($response->body, 'monitor-program-roster') && str_contains($response->body, 'data-program-monitor-image') && str_contains($response->body, 'data-monitor-footer'), 'Reference monitor presentation structure is missing.');
+    publicMonitorPageAssert(str_contains($response->body, 'monitor-live-progress') && str_contains($response->body, 'Persentase jurusan terfavorit'), 'Overview percentage panel structure is missing.');
+    publicMonitorPageAssert(str_contains($response->body, 'monitor-program-name-card') && str_contains($response->body, 'data-program-title') && str_contains($response->body, 'data-program-name'), 'Monitor program code and full-name presentation structure is missing.');
+    publicMonitorPageAssert(!str_contains($response->body, 'monitor-navigation') && !str_contains($response->body, 'data-monitor-direction'), 'Monitor exposes manual slide navigation instead of the automatic presentation flow.');
     publicMonitorPageAssert(str_contains($response->body, '/assets/fonts/FredokaOne-Regular.ttf') === false, 'Font must be referenced by local stylesheet only.');
     publicMonitorPageAssert(str_contains($response->body, '/assets/css/monitor.css') && str_contains($response->body, '/assets/js/vendor/qrcode-generator.js') && str_contains($response->body, '/assets/js/monitor-shell.js'), 'Monitor shell local assets are missing.');
     publicMonitorPageAssert(str_contains($response->body, 'data-monitor-alias="monitor-page"'), 'Monitor alias was not safely rendered.');
     publicMonitorPageAssert(str_contains($response->body, 'Program ini tidak tersedia pada versi kuis aktif.'), 'Missing-program state is missing.');
-    $expectedQrTarget = htmlspecialchars(rtrim($config->string('APP_URL'), '/') . '/go/monitor-page', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-    publicMonitorPageAssert(str_contains($response->body, 'data-monitor-qr-target="' . $expectedQrTarget . '"'), 'QR target must use the configured APP_URL and canonical smart-link path.');
+    publicMonitorPageAssert(str_contains($response->body, 'data-monitor-qr-target=""') && str_contains($response->body, 'QR belum dibuat oleh admin.'), 'Monitor silently generated a QR target.');
+    $targetA = 'http://10.104.37.122:8081/go/monitor-page';
+    (new AdminCampaignRepository($database))->saveSmartLinkQrTarget($fixture['school_id'], $fixture['campaign_id'], 'monitor-page', $targetA);
+    $generated = $router->dispatch(new Request('GET', '/monitor/monitor-page'));
+    publicMonitorPageAssert(str_contains($generated->body, 'data-monitor-qr-target="' . $targetA . '"'), 'Monitor did not use the persisted QR target.');
+    putenv('SMK_MATCH_BASE_URL=http://192.168.1.50:8081');
+    $changedConfig = Config::load(SMK_MATCH_ROOT);
+    $changedRouter = $routes($changedConfig);
+    $baseChanged = $changedRouter->dispatch(new Request('GET', '/monitor/monitor-page'));
+    putenv('SMK_MATCH_BASE_URL');
+    publicMonitorPageAssert(str_contains($baseChanged->body, 'data-monitor-qr-target="' . $targetA . '"'), 'Monitor QR target changed without regeneration.');
     publicMonitorPageAssert(!str_contains($response->body, 'quiz_version_id') && !str_contains($response->body, '/play/monitor-page'), 'Monitor QR must not point directly at a quiz-version route.');
     publicMonitorPageAssert(!str_contains($response->body, 'campaign_id') && !str_contains($response->body, 'attempt_uuid') && !str_contains($response->body, 'phone'), 'Monitor shell bootstraps sensitive data.');
     publicMonitorPageAssert($router->dispatch(new Request('GET', '/monitor/unknown-page'))->status === 404, 'Unknown monitor alias must be hidden.');
@@ -89,13 +110,29 @@ try {
     $stylesheet = file_get_contents(SMK_MATCH_ROOT . '/public/assets/css/monitor.css');
     $script = file_get_contents(SMK_MATCH_ROOT . '/public/assets/js/monitor-shell.js');
     $qrVendor = file_get_contents(SMK_MATCH_ROOT . '/public/assets/js/vendor/qrcode-generator.js');
-    publicMonitorPageAssert(is_string($stylesheet) && str_contains($stylesheet, '@media (max-width: 1100px)') && str_contains($stylesheet, '@media (max-width: 700px)') && str_contains($stylesheet, 'prefers-reduced-motion'), 'Responsive and reduced-motion hooks are missing.');
+    publicMonitorPageAssert(
+        is_string($stylesheet)
+        && str_contains($stylesheet, '@media (max-width: 900px)')
+        && str_contains($stylesheet, 'grid-template-columns: 1fr')
+        && str_contains($stylesheet, '@media (max-width: 700px)')
+        && str_contains($stylesheet, 'prefers-reduced-motion'),
+        'Responsive and reduced-motion hooks are missing.',
+    );
+    publicMonitorPageAssert(
+        is_string($stylesheet)
+        && str_contains($stylesheet, 'height: 100dvh')
+        && str_contains($stylesheet, '.monitor-navigation { display: none; }')
+        && str_contains($stylesheet, 'object-fit: cover')
+        && str_contains($stylesheet, '.monitor-program-name-card')
+        && str_contains($stylesheet, 'overflow: hidden'),
+        'Fullscreen monitor presentation contract is missing.',
+    );
     publicMonitorPageAssert(is_string($script), 'Monitor shell script could not be read.');
     publicMonitorPageAssert(is_string($qrVendor) && str_contains($qrVendor, 'SMK Match QR SVG encoder v1.0.0 (pinned') && str_contains($qrVendor, 'SPDX-License-Identifier: MIT') && str_contains($qrVendor, 'SmkMatchQrSvg'), 'Local QR encoder is not pinned and licensed.');
     foreach (['XMLHttpRequest', 'WebSocket', 'EventSource', 'query.set("afterResultId"', 'query.set("after_result_id"'] as $forbidden) {
         publicMonitorPageAssert(!str_contains($script, $forbidden), 'Monitor shell contains forbidden live-data behavior: ' . $forbidden);
     }
-    foreach (['POLLING_INTERVAL_MS = 5000', 'SLIDE_DURATION_MS = 12000', 'window.fetch', 'requestInFlight', 'knownResultIds', 'reconciliationAfterResultId', 'next_page_after_result_id', 'has_more', 'VISIBLE_EVENT_LIMIT = 20', 'clearBatchState', 'state.activeBatchId !== batchId', 'state.knownResultIds.size === completedCount(monitor)', 'reconciliationIsNeeded(reconciliationMonitor)', 'state.reconciliationAfterResultId = 0', 'scheduleSlideRotation', 'visibilitychange', 'prefers-reduced-motion: reduce', 'selectSlide', 'renderOverview', 'renderProgramSlide', 'dataset.monitorProgramCode', 'activityMessage', 'hasil setara', 'SmkMatchQrSvg.render'] as $required) {
+    foreach (['POLLING_INTERVAL_MS = 5000', 'SLIDE_DURATION_MS = 12000', 'DISPLAY_EVENT_LIMIT = 5', 'scheduleActivityRotation', 'window.fetch', 'requestInFlight', 'knownResultIds', 'reconciliationAfterResultId', 'next_page_after_result_id', 'has_more', 'VISIBLE_EVENT_LIMIT = 20', 'clearBatchState', 'state.activeBatchId !== batchId', 'state.knownResultIds.size === completedCount(monitor)', 'reconciliationIsNeeded(reconciliationMonitor)', 'state.reconciliationAfterResultId = 0', 'scheduleSlideRotation', 'visibilitychange', 'prefers-reduced-motion: reduce', 'selectSlide', 'renderOverview', 'renderProgramSlide', 'dataset.monitorProgramSlot', 'programs.length === 3', 'data-program-indicator', 'activityMessage', 'hasil setara', 'SmkMatchQrSvg.render', 'monitor_image_path', 'data-program-monitor-image', 'data-monitor-footer'] as $required) {
         publicMonitorPageAssert(str_contains($script, $required), 'Monitor shell reconciliation behavior is missing: ' . $required);
     }
 

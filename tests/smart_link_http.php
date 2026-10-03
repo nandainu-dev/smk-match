@@ -280,17 +280,15 @@ try {
 
     $firstResolution = $smartLinkService->resolve('ppdb');
     $response = $router->dispatch(new Request('GET', '/go/ppdb'));
-    smartLinkHttpAssert($response->status === 200, 'Playable alias did not return HTTP 200.');
-    smartLinkHttpAssert(str_contains($response->body, 'Campaign siap'), 'Playable alias did not render the safe entry state.');
-    smartLinkHttpAssert(!str_contains($response->body, 'participant-quiz'), 'Playable alias invoked the G8 fixture flow.');
-    smartLinkHttpAssert(!isset($response->headers['Location']), 'Playable alias returned a redirect.');
+    smartLinkHttpAssert($response->status === 302, 'Playable alias did not redirect to the participant quiz.');
+    smartLinkHttpAssert(
+        ($response->headers['Location'] ?? null) === '/play/ppdb',
+        'Playable alias did not redirect to its canonical participant quiz path.',
+    );
     smartLinkHttpAssert(
         ($response->headers['Cache-Control'] ?? null) === 'no-store, max-age=0',
         'Entry response must not cache a stale active batch.',
     );
-    foreach (['campaign_id', 'batch_id', 'quiz_version_id', 'weights', 'answer', 'PDO', 'SQL'] as $forbiddenValue) {
-        smartLinkHttpAssert(!str_contains($response->body, $forbiddenValue), 'Entry response exposes forbidden content: ' . $forbiddenValue);
-    }
     smartLinkHttpAssert(
         $firstResolution->campaignId === $campaignId
             && $firstResolution->activeBatchId === $firstBatch->id
@@ -311,8 +309,11 @@ try {
     $secondResolution = $smartLinkService->resolve('ppdb');
     $historicalFirstBatch = $batchRepository->findById($firstBatch->id);
     $afterReset = $router->dispatch(new Request('GET', '/go/ppdb'));
-    smartLinkHttpAssert($afterReset->status === 200, 'Alias stopped working after reset.');
-    smartLinkHttpAssert(!isset($afterReset->headers['Location']), 'Reset route response returned a redirect.');
+    smartLinkHttpAssert($afterReset->status === 302, 'Alias stopped redirecting after reset.');
+    smartLinkHttpAssert(
+        ($afterReset->headers['Location'] ?? null) === '/play/ppdb',
+        'Reset alias did not retain its canonical participant quiz path.',
+    );
     smartLinkHttpAssert(
         $secondResolution->alias === 'ppdb'
             && $secondResolution->campaignId === $campaignId

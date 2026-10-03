@@ -12,47 +12,54 @@ final class AdminProgramMediaRepository
     {
     }
 
-    /** @return list<array{id: int, name: string, code: string, mascot_path: ?string}> */
+    /** @return list<array<string, mixed>> */
     public function listProgramsForSchool(int $schoolId): array
     {
         $this->assertPositiveId($schoolId, 'School identity');
 
         $statement = $this->connection()->prepare(
-            'SELECT id, name, short_name, mascot_path, skills_json
+            'SELECT id, name, short_name, mascot_path, result_image_path, share_image_path, monitor_image_path, skills_json
              FROM programs
              WHERE school_id = :school_id
              ORDER BY sort_order ASC, id ASC'
         );
         $statement->execute(['school_id' => $schoolId]);
 
-        return array_map(fn (array $row): array => $this->programWithPresentation($row), $statement->fetchAll());
+        return array_map(fn (array $row): array => $this->program($row), $statement->fetchAll());
     }
 
-    /** @return array{id: int, name: string, code: string, mascot_path: ?string}|null */
+    /** @return array<string, mixed>|null */
     public function findProgramForSchool(int $schoolId, int $programId): ?array
     {
         $this->assertPositiveId($schoolId, 'School identity');
         $this->assertPositiveId($programId, 'Program identity');
 
         $statement = $this->connection()->prepare(
-            'SELECT id, name, short_name, mascot_path, skills_json
+            'SELECT id, name, short_name, mascot_path, result_image_path, share_image_path, monitor_image_path, skills_json
              FROM programs
              WHERE id = :program_id AND school_id = :school_id'
         );
         $statement->execute(['program_id' => $programId, 'school_id' => $schoolId]);
         $row = $statement->fetch();
 
-        return $row === false ? null : $this->programWithPresentation($row);
+        return $row === false ? null : $this->program($row);
     }
 
-    /** @return array{id: int, name: string, code: string, mascot_path: ?string} */
+    /** @return array<string, int|string|null> */
     public function recordMascotAndSetCurrent(int $schoolId, int $programId, string $publicPath): array
+    {
+        return $this->recordMediaAndSetCurrent($schoolId, $programId, 'mascot', $publicPath);
+    }
+
+    /** @return array<string, int|string|null> */
+    public function recordMediaAndSetCurrent(int $schoolId, int $programId, string $role, string $publicPath): array
     {
         $this->assertPositiveId($schoolId, 'School identity');
         $this->assertPositiveId($programId, 'Program identity');
         if (!ProgramMediaStorage::isCanonicalPublicPath($publicPath)) {
-            throw new \InvalidArgumentException('Program mascot path must be canonical.');
+            throw new \InvalidArgumentException('Program media path must be canonical.');
         }
+        $column = $this->mediaColumn($role);
 
         $connection = $this->connection();
         $connection->beginTransaction();
@@ -66,21 +73,21 @@ final class AdminProgramMediaRepository
             $history->execute([
                 'program_id' => $programId,
                 'path' => $publicPath,
-                'media_type' => 'mascot',
+                'media_type' => $role,
             ]);
 
             $update = $connection->prepare(
                 'UPDATE programs
-                 SET mascot_path = :mascot_path, updated_at = UTC_TIMESTAMP()
+                 SET ' . $column . ' = :media_path, updated_at = UTC_TIMESTAMP()
                  WHERE id = :program_id AND school_id = :school_id'
             );
             $update->execute([
-                'mascot_path' => $publicPath,
+                'media_path' => $publicPath,
                 'program_id' => $programId,
                 'school_id' => $schoolId,
             ]);
             if ($update->rowCount() !== 1) {
-                throw new RuntimeException('Program mascot update was not applied.');
+                throw new RuntimeException('Program media update was not applied.');
             }
 
             $connection->commit();
@@ -93,15 +100,59 @@ final class AdminProgramMediaRepository
         }
 
         $program = $this->findProgramForSchool($schoolId, $programId);
-        if ($program === null || $program['mascot_path'] !== $publicPath) {
-            throw new RuntimeException('Program mascot could not be reloaded.');
+        if ($program === null || $program[$column] !== $publicPath) {
+            throw new RuntimeException('Program media could not be reloaded.');
+        }
+
+        return $program;
+    }
+
+    /** @return array<string, int|string|null> */
+    public function clearCurrentMascot(int $schoolId, int $programId): array
+    {
+        return $this->clearCurrentMedia($schoolId, $programId, 'mascot');
+    }
+
+    /** @return array<string, int|string|null> */
+    public function clearCurrentMedia(int $schoolId, int $programId, string $role): array
+    {
+        $this->assertPositiveId($schoolId, 'School identity');
+        $this->assertPositiveId($programId, 'Program identity');
+
+        $column = $this->mediaColumn($role);
+        $connection = $this->connection();
+        $connection->beginTransaction();
+
+        try {
+            $this->lockOwnedProgram($connection, $schoolId, $programId);
+            $update = $connection->prepare(
+                'UPDATE programs
+                 SET ' . $column . ' = NULL, updated_at = UTC_TIMESTAMP()
+                 WHERE id = :program_id AND school_id = :school_id'
+            );
+            $update->execute(['program_id' => $programId, 'school_id' => $schoolId]);
+            if ($update->rowCount() !== 1) {
+                throw new RuntimeException('Program media removal was not applied.');
+            }
+            $connection->commit();
+        } catch (\Throwable $throwable) {
+            if ($connection->inTransaction()) {
+                $connection->rollBack();
+            }
+
+            throw $throwable;
+        }
+
+        $program = $this->findProgramForSchool($schoolId, $programId);
+        if ($program === null || $program[$column] !== null) {
+            throw new RuntimeException('Program media removal could not be reloaded.');
         }
 
         return $program;
     }
 
     /** @return array{id: int, name: string, code: string, mascot_path: ?string} */
-    public function clearCurrentMascot(int $schoolId, int $programId): array
+    public function renameProgram(int $schoolId, int $programId, string $name, string $code): array
     {
         $this->assertPositiveId($schoolId, 'School identity');
         $this->assertPositiveId($programId, 'Program identity');
@@ -113,12 +164,59 @@ final class AdminProgramMediaRepository
             $this->lockOwnedProgram($connection, $schoolId, $programId);
             $update = $connection->prepare(
                 'UPDATE programs
-                 SET mascot_path = NULL, updated_at = UTC_TIMESTAMP()
+                 SET name = :name, short_name = :short_name, updated_at = UTC_TIMESTAMP()
                  WHERE id = :program_id AND school_id = :school_id'
             );
-            $update->execute(['program_id' => $programId, 'school_id' => $schoolId]);
-            if ($update->rowCount() !== 1) {
-                throw new RuntimeException('Program mascot removal was not applied.');
+            $update->execute([
+                'name' => $name,
+                'short_name' => $code,
+                'program_id' => $programId,
+                'school_id' => $schoolId,
+            ]);
+            $connection->commit();
+        } catch (\Throwable $throwable) {
+            if ($connection->inTransaction()) {
+                $connection->rollBack();
+            }
+
+            throw $throwable;
+        }
+
+        $program = $this->findProgramForSchool($schoolId, $programId);
+        if ($program === null || $program['name'] !== $name || $program['code'] !== $code) {
+            throw new RuntimeException('Program name update could not be reloaded.');
+        }
+
+        return $program;
+    }
+
+    /** @param list<string> $skills @param list<string> $careers @return array<string, mixed> */
+    public function savePresentationContent(int $schoolId, int $programId, array $skills, array $careers): array
+    {
+        $this->assertPositiveId($schoolId, 'School identity');
+        $this->assertPositiveId($programId, 'Program identity');
+
+        $skillsJson = json_encode($skills, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE);
+        $connection = $this->connection();
+        $connection->beginTransaction();
+
+        try {
+            $this->lockOwnedProgram($connection, $schoolId, $programId);
+            $update = $connection->prepare(
+                'UPDATE programs
+                 SET skills_json = :skills_json, updated_at = UTC_TIMESTAMP()
+                 WHERE id = :program_id AND school_id = :school_id'
+            );
+            $update->execute(['skills_json' => $skillsJson, 'program_id' => $programId, 'school_id' => $schoolId]);
+
+            $delete = $connection->prepare('DELETE FROM program_careers WHERE program_id = :program_id');
+            $delete->execute(['program_id' => $programId]);
+            $insert = $connection->prepare(
+                'INSERT INTO program_careers (program_id, title, description, sort_order, created_at)
+                 VALUES (:program_id, :title, NULL, :sort_order, UTC_TIMESTAMP())'
+            );
+            foreach ($careers as $order => $career) {
+                $insert->execute(['program_id' => $programId, 'title' => $career, 'sort_order' => $order]);
             }
             $connection->commit();
         } catch (\Throwable $throwable) {
@@ -130,8 +228,8 @@ final class AdminProgramMediaRepository
         }
 
         $program = $this->findProgramForSchool($schoolId, $programId);
-        if ($program === null || $program['mascot_path'] !== null) {
-            throw new RuntimeException('Program mascot removal could not be reloaded.');
+        if ($program === null || $program['skills'] !== $skills || $program['careers'] !== $careers) {
+            throw new RuntimeException('Program presentation content could not be reloaded.');
         }
 
         return $program;
@@ -151,6 +249,17 @@ final class AdminProgramMediaRepository
         }
     }
 
+    private function mediaColumn(string $role): string
+    {
+        return match ($role) {
+            'mascot' => 'mascot_path',
+            'result' => 'result_image_path',
+            'share' => 'share_image_path',
+            'monitor' => 'monitor_image_path',
+            default => throw new \InvalidArgumentException('Program media role is invalid.'),
+        };
+    }
+
     private function connection(): PDO
     {
         return $this->database->connection();
@@ -163,214 +272,64 @@ final class AdminProgramMediaRepository
         }
     }
 
-    /** @param array<string, mixed> $row @return array{id: int, name: string, code: string, mascot_path: ?string} */
+    /** @param array<string, mixed> $row @return array<string, mixed> */
+    private function program(array $row): array
+    {
+        $programId = $this->positiveRowInt($row, 'id');
 
-    /** @param list<string> $skills @param list<string> $careers @return array<string, mixed> */
-    public function savePresentationContent(
-        int $schoolId,
-        int $programId,
-        array $skills,
-        array $careers,
-    ): array {
-        $this->assertPositiveId($schoolId, 'School identity');
-        $this->assertPositiveId($programId, 'Program identity');
-
-        $skillsJson = json_encode(
-            $skills,
-            JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE,
-        );
-
-        $connection = $this->connection();
-        $connection->beginTransaction();
-
-        try {
-            $lock = $connection->prepare(
-                'SELECT id
-                 FROM programs
-                 WHERE id = :program_id AND school_id = :school_id
-                 FOR UPDATE'
-            );
-
-            $lock->execute([
-                'program_id' => $programId,
-                'school_id' => $schoolId,
-            ]);
-
-            if ($lock->fetch() === false) {
-                throw new \RuntimeException(
-                    'Program does not belong to the authenticated school.'
-                );
-            }
-
-            $update = $connection->prepare(
-                'UPDATE programs
-                 SET skills_json = :skills_json,
-                     updated_at = UTC_TIMESTAMP()
-                 WHERE id = :program_id AND school_id = :school_id'
-            );
-
-            $update->execute([
-                'skills_json' => $skillsJson,
-                'program_id' => $programId,
-                'school_id' => $schoolId,
-            ]);
-
-            $delete = $connection->prepare(
-                'DELETE FROM program_careers
-                 WHERE program_id = :program_id'
-            );
-
-            $delete->execute([
-                'program_id' => $programId,
-            ]);
-
-            $insert = $connection->prepare(
-                'INSERT INTO program_careers (
-                    program_id,
-                    title,
-                    description,
-                    sort_order,
-                    created_at
-                 ) VALUES (
-                    :program_id,
-                    :title,
-                    NULL,
-                    :sort_order,
-                    UTC_TIMESTAMP()
-                 )'
-            );
-
-            foreach ($careers as $order => $career) {
-                $insert->execute([
-                    'program_id' => $programId,
-                    'title' => $career,
-                    'sort_order' => $order,
-                ]);
-            }
-
-            $connection->commit();
-        } catch (\Throwable $throwable) {
-            if ($connection->inTransaction()) {
-                $connection->rollBack();
-            }
-
-            throw $throwable;
-        }
-
-        $program = $this->findProgramForSchool(
-            $schoolId,
-            $programId,
-        );
-
-        if (
-            $program === null
-            || $program['skills'] !== $skills
-            || $program['careers'] !== $careers
-        ) {
-            throw new \RuntimeException(
-                'Program presentation content could not be reloaded.'
-            );
-        }
-
-        return $program;
+        return [
+            'id' => $programId,
+            'name' => $this->nonBlankRowString($row, 'name'),
+            'code' => $this->nonBlankRowString($row, 'short_name'),
+            'mascot_path' => $this->nullableRowString($row, 'mascot_path'),
+            'result_image_path' => $this->nullableRowString($row, 'result_image_path'),
+            'share_image_path' => $this->nullableRowString($row, 'share_image_path'),
+            'monitor_image_path' => $this->nullableRowString($row, 'monitor_image_path'),
+            'skills' => $this->nullableStringList($row, 'skills_json'),
+            'careers' => $this->careersForProgram($programId),
+        ];
     }
 
-    /** @return array<string, mixed> */
-    private function programWithPresentation(array $row): array
+    /** @param array<string, mixed> $row @return list<string> */
+    private function nullableStringList(array $row, string $key): array
     {
-        $program = $this->program($row);
+        $json = $this->nullableRowString($row, $key);
+        if ($json === null || trim($json) === '') {
+            return [];
+        }
 
-        $program['skills'] = $this->stringListFromJson(
-            $row['skills_json'] ?? null,
-        );
+        try {
+            $decoded = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            throw new RuntimeException('Invalid persisted program presentation data.');
+        }
+        if (!is_array($decoded) || !array_is_list($decoded)) {
+            throw new RuntimeException('Invalid persisted program presentation data.');
+        }
 
-        $program['careers'] = $this->careersForProgram(
-            (int) $program['id'],
-        );
+        $items = [];
+        foreach ($decoded as $value) {
+            if (!is_string($value) || trim($value) === '') {
+                throw new RuntimeException('Invalid persisted program presentation data.');
+            }
+            $items[] = $value;
+        }
 
-        return $program;
+        return $items;
     }
 
     /** @return list<string> */
     private function careersForProgram(int $programId): array
     {
         $statement = $this->connection()->prepare(
-            'SELECT title
-             FROM program_careers
-             WHERE program_id = :program_id
-             ORDER BY sort_order ASC, id ASC'
+            'SELECT title FROM program_careers WHERE program_id = :program_id ORDER BY sort_order ASC, id ASC'
         );
+        $statement->execute(['program_id' => $programId]);
 
-        $statement->execute([
-            'program_id' => $programId,
-        ]);
-
-        $careers = [];
-
-        foreach ($statement->fetchAll() as $row) {
-            if (
-                !isset($row['title'])
-                || !is_string($row['title'])
-                || trim($row['title']) === ''
-            ) {
-                throw new \RuntimeException(
-                    'Invalid program career persistence state.'
-                );
-            }
-
-            $careers[] = trim($row['title']);
-        }
-
-        return $careers;
-    }
-
-    /** @return list<string> */
-    private function stringListFromJson(mixed $value): array
-    {
-        if (
-            $value === null
-            || !is_string($value)
-            || trim($value) === ''
-        ) {
-            return [];
-        }
-
-        $decoded = json_decode(
-            $value,
-            true,
-            512,
-            JSON_THROW_ON_ERROR,
+        return array_map(
+            fn (array $row): string => $this->nonBlankRowString($row, 'title'),
+            $statement->fetchAll(),
         );
-
-        if (!is_array($decoded)) {
-            throw new \RuntimeException(
-                'Program skills persistence state is invalid.'
-            );
-        }
-
-        $items = [];
-
-        foreach ($decoded as $item) {
-            if (!is_string($item) || trim($item) === '') {
-                throw new \RuntimeException(
-                    'Program skills persistence state is invalid.'
-                );
-            }
-
-            $items[] = trim($item);
-        }
-
-        return $items;
-    }
-
-    private function program(array $row): array
-    {
-        return [
-            'id' => $this->positiveRowInt($row, 'id'),
-            'name' => $this->nonBlankRowString($row, 'name'),
-            'code' => $this->nonBlankRowString($row, 'short_name'),
-            'mascot_path' => $this->nullableRowString($row, 'mascot_path'),
-        ];
     }
 
     /** @param array<string, mixed> $row */

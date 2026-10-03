@@ -56,16 +56,34 @@
         .admin-hint { color: #605a77; font-size: .92rem; }
         @media (max-width: 720px) { body { align-items: flex-start; padding: 14px; } .admin-page-header, .admin-card-heading, .admin-version-row { align-items: flex-start; flex-direction: column; } .admin-grid { grid-template-columns: 1fr; } .admin-grid-wide { grid-column: auto; } }
     </style>
+    <link rel="stylesheet" href="/assets/css/admin.css">
 </head>
-<body>
-<nav class="admin-nav" aria-label="Navigasi admin">
-    <a href="/admin">Quiz</a>
-    <a href="/admin/campaigns">Kampanye</a>
-    <a href="/admin/history">Riwayat</a>
-    <a href="/admin/analytics">Analitik</a>
-    <a href="/admin/program-media">Media program</a>
-</nav>
-<?= $content ?>
+<body class="admin-body<?= ($adminLayout ?? 'app') === 'auth' ? ' admin-body--auth' : '' ?>">
+<?php if (($adminLayout ?? 'app') === 'auth'): ?>
+    <div class="admin-auth-shell">
+        <?= $content ?>
+    </div>
+<?php else: ?>
+    <div class="admin-app-shell">
+        <aside class="admin-sidebar" aria-label="Navigasi admin">
+            <a class="admin-brand" href="/admin" aria-label="Admin SMK Match">Admin <span>SMK Match</span></a>
+            <nav class="admin-nav" aria-label="Menu utama">
+                <a class="<?= ($adminActiveNav ?? 'quiz') === 'quiz' ? 'is-active' : '' ?>" href="/admin/quizzes">Quiz</a>
+                <a class="<?= ($adminActiveNav ?? '') === 'campaigns' ? 'is-active' : '' ?>" href="/admin/campaigns">Kampanye</a>
+                <a class="<?= ($adminActiveNav ?? '') === 'history' ? 'is-active' : '' ?>" href="/admin/history">Riwayat</a>
+                <a class="<?= ($adminActiveNav ?? '') === 'analytics' ? 'is-active' : '' ?>" href="/admin/analytics">Analitik</a>
+                <a class="<?= ($adminActiveNav ?? '') === 'media' ? 'is-active' : '' ?>" href="/admin/program-media">Media program</a>
+            </nav>
+            <form class="admin-logout" method="post" action="/admin/logout">
+                <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
+                <button class="admin-button admin-button--quiet" type="submit">Keluar</button>
+            </form>
+        </aside>
+        <div class="admin-content">
+            <?= $content ?>
+        </div>
+    </div>
+<?php endif; ?>
 <?php foreach (($adminScripts ?? []) as $adminScript): ?>
     <?php if (is_string($adminScript) && preg_match('#^/assets/[A-Za-z0-9._/-]+$#', $adminScript) === 1): ?>
         <script src="<?= htmlspecialchars($adminScript, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') ?>" defer></script>

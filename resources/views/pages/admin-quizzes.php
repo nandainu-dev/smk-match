@@ -12,10 +12,6 @@ ob_start();
             <h1>Quiz dan versi</h1>
             <p>Kelola draft tanpa mengubah versi yang sudah dipublikasikan atau dipakai peserta.</p>
         </div>
-        <form method="post" action="/admin/logout">
-            <input type="hidden" name="csrf_token" value="<?= $csrfToken ?>">
-            <button class="admin-button admin-button--quiet" type="submit">Keluar</button>
-        </form>
     </header>
 
     <?php if ($message !== null): ?>
@@ -101,4 +97,5 @@ ob_start();
 </main>
 <?php
 $content = (string) ob_get_clean();
+$adminActiveNav = 'quiz';
 require SMK_MATCH_ROOT . '/resources/views/layouts/admin.php';

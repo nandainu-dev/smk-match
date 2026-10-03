@@ -244,7 +244,48 @@ try {
     $connection->prepare('UPDATE attempts SET status = :status, submitted_at = UTC_TIMESTAMP() WHERE id = :id')->execute(['status' => 'completed', 'id' => $newAttempt->id]);
     $completed = $router->dispatch(publicQuizRequest($newAttemptUuid, $newVisitor));
     publicQuizAssert($completed->status === 409 && $completed->body === '{"ok":false,"error":"attempt_completed"}' && !str_contains($completed->body, 'quiz'), 'Completed attempt quiz delivery is unsafe.');
-    publicQuizAssert($router->dispatch(new Request('GET', '/go/delivery'))->status === 200, 'Valid public campaign entry changed.');
+    $campaignEntry = $router->dispatch(new Request('GET', '/go/delivery'));
+    $participantPlay = $router->dispatch(new Request('GET', '/play/delivery'));
+    publicQuizAssert(
+        $campaignEntry->status === 302
+            && ($campaignEntry->headers['Location'] ?? null) === '/play/delivery',
+        'Valid public campaign entry redirect changed.',
+    );
+    publicQuizAssert(
+        $participantPlay->status === 200 && str_contains($participantPlay->body, 'participant-quiz'),
+        'Valid participant quiz shell changed.',
+    );
+    $playPayloadMatch = [];
+    publicQuizAssert(
+        preg_match('/<script id="participant-quiz-data" type="application\/json">(.*?)<\/script>/s', $participantPlay->body, $playPayloadMatch) === 1,
+        'Participant play presentation payload is missing.',
+    );
+    $playPayload = json_decode($playPayloadMatch[1], true, 512, JSON_THROW_ON_ERROR);
+    publicQuizAssert(
+        array_keys($playPayload) === ['mode', 'alias', 'question_count', 'presentation_programs']
+            && $playPayload['mode'] === 'real'
+            && $playPayload['alias'] === 'delivery'
+            && $playPayload['question_count'] === 2
+            && array_column($playPayload['presentation_programs'], 'code') === ['ALPHA', 'BETA', 'GAMMA'],
+        'Participant play snapshot presentation manifest is invalid.',
+    );
+    publicQuizAssert(
+        !str_contains(json_encode($playPayload, JSON_THROW_ON_ERROR), 'weight')
+            && !str_contains(json_encode($playPayload, JSON_THROW_ON_ERROR), 'program_id'),
+        'Participant play presentation manifest leaked scoring data.',
+    );
+    $connection->prepare('UPDATE programs SET name = :name WHERE id = :id')->execute([
+        'name' => 'Mutable catalog name',
+        'id' => $programIds['ALPHA'],
+    ]);
+    $snapshotPlay = $router->dispatch(new Request('GET', '/play/delivery'));
+    preg_match('/<script id="participant-quiz-data" type="application\/json">(.*?)<\/script>/s', $snapshotPlay->body, $snapshotPayloadMatch);
+    $snapshotPayload = json_decode($snapshotPayloadMatch[1] ?? '', true, 512, JSON_THROW_ON_ERROR);
+    publicQuizAssert(
+        $snapshotPlay->status === 200
+            && $snapshotPayload['presentation_programs'][0]['display_name'] === 'Program ALPHA',
+        'Participant play refreshed presentation data from the mutable program catalog.',
+    );
     $connection->prepare('UPDATE campaigns SET status = :status WHERE id = :id')->execute(['status' => 'draft', 'id' => $campaignId]);
     publicQuizAssert($router->dispatch(publicQuizRequest($oldAttemptUuid, $oldVisitor))->status === 200, 'Inactive campaign blocked historical delivery.');
     publicQuizAssert(

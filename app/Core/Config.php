@@ -14,7 +14,7 @@ final class Config
     {
         $values = self::readDotEnv($root . '/.env');
 
-        foreach (['APP_NAME', 'APP_ENV', 'APP_DEBUG', 'APP_URL', 'APP_TIMEZONE', 'DB_HOST', 'DB_PORT', 'DB_DATABASE', 'DB_USERNAME', 'DB_PASSWORD', 'DB_CHARSET'] as $key) {
+        foreach (['APP_NAME', 'APP_ENV', 'APP_DEBUG', 'APP_URL', 'SMK_MATCH_BASE_URL', 'APP_TIMEZONE', 'DB_HOST', 'DB_PORT', 'DB_DATABASE', 'DB_USERNAME', 'DB_PASSWORD', 'DB_CHARSET'] as $key) {
             $value = getenv($key);
             if ($value !== false) {
                 $values[$key] = $value;
@@ -45,6 +45,18 @@ final class Config
     public function debug(): bool
     {
         return filter_var($this->string('APP_DEBUG'), FILTER_VALIDATE_BOOL);
+    }
+
+    /**
+     * Returns the configured public base URL only. Request Host headers never
+     * participate in Smart Link or QR target construction.
+     */
+    public function publicBaseUrl(): string
+    {
+        $configured = trim($this->string('SMK_MATCH_BASE_URL'));
+        $baseUrl = $configured === '' ? $this->string('APP_URL') : $configured;
+
+        return rtrim($baseUrl, '/');
     }
 
     /** @return array<string, string> */

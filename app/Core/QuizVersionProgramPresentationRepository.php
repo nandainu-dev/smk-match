@@ -18,13 +18,15 @@ final class QuizVersionProgramPresentationRepository
         $statement = $this->connection()->prepare(
             'INSERT INTO quiz_version_program_presentations (
                 quiz_version_program_id, program_code_snapshot, program_name_snapshot,
-                personality_title_snapshot, mascot_path_snapshot, primary_color_snapshot,
+                personality_title_snapshot, mascot_path_snapshot, result_image_path_snapshot,
+                share_image_path_snapshot, monitor_image_path_snapshot, primary_color_snapshot,
                 accent_color_snapshot, tagline_snapshot, description_snapshot,
                 superpower_snapshot, skills_snapshot, careers_snapshot, snapshot_provenance,
                 created_at, updated_at
             ) VALUES (
                 :membership_id, :program_code, :program_name, :personality_title,
-                :mascot_path, :primary_color, :accent_color, :tagline, :description,
+                :mascot_path, :result_image_path, :share_image_path, :monitor_image_path,
+                :primary_color, :accent_color, :tagline, :description,
                 :superpower, :skills, :careers, :provenance, UTC_TIMESTAMP(), UTC_TIMESTAMP()
             )'
         );
@@ -34,6 +36,9 @@ final class QuizVersionProgramPresentationRepository
             'program_name' => $presentation->programNameSnapshot,
             'personality_title' => $presentation->personalityTitleSnapshot,
             'mascot_path' => $presentation->mascotPathSnapshot,
+            'result_image_path' => $presentation->resultImagePathSnapshot,
+            'share_image_path' => $presentation->shareImagePathSnapshot,
+            'monitor_image_path' => $presentation->monitorImagePathSnapshot,
             'primary_color' => $presentation->primaryColorSnapshot,
             'accent_color' => $presentation->accentColorSnapshot,
             'tagline' => $presentation->taglineSnapshot,
@@ -89,6 +94,9 @@ final class QuizVersionProgramPresentationRepository
             $source->skillsSnapshot,
             $source->careersSnapshot,
             'version_snapshot',
+            $source->resultImagePathSnapshot,
+            $source->shareImagePathSnapshot,
+            $source->monitorImagePathSnapshot,
         ));
     }
 
@@ -105,7 +113,8 @@ final class QuizVersionProgramPresentationRepository
     private function selectSql(): string
     {
         return 'SELECT qvpp.quiz_version_program_id, qvpp.program_code_snapshot, qvpp.program_name_snapshot,
-                       qvpp.personality_title_snapshot, qvpp.mascot_path_snapshot, qvpp.primary_color_snapshot,
+                       qvpp.personality_title_snapshot, qvpp.mascot_path_snapshot, qvpp.result_image_path_snapshot,
+                       qvpp.share_image_path_snapshot, qvpp.monitor_image_path_snapshot, qvpp.primary_color_snapshot,
                        qvpp.accent_color_snapshot, qvpp.tagline_snapshot, qvpp.description_snapshot,
                        qvpp.superpower_snapshot, qvpp.skills_snapshot, qvpp.careers_snapshot, qvpp.snapshot_provenance
                 FROM quiz_version_program_presentations AS qvpp
@@ -134,6 +143,9 @@ final class QuizVersionProgramPresentationRepository
             $this->nullableString($row, 'skills_snapshot'),
             $this->nullableString($row, 'careers_snapshot'),
             $this->string($row, 'snapshot_provenance'),
+            $this->nullableString($row, 'result_image_path_snapshot'),
+            $this->nullableString($row, 'share_image_path_snapshot'),
+            $this->nullableString($row, 'monitor_image_path_snapshot'),
         );
     }
 

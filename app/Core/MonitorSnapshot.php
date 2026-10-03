@@ -12,6 +12,7 @@ final class MonitorSnapshot
      * @param array{started_count: int, completed_count: int, tie_count: int} $summary
      * @param list<array<string, mixed>> $programs
      * @param list<array<string, mixed>> $recentActivity
+     * @param array{footer_logo_path: ?string, footer_text: ?string} $footer
      * @param array{result_ids: list<int>, has_more: bool, next_page_after_result_id: ?int}|null $reconciliation
      */
     private function __construct(
@@ -20,6 +21,7 @@ final class MonitorSnapshot
         public readonly array $summary,
         public readonly array $programs,
         public readonly array $recentActivity,
+        public readonly array $footer,
         public readonly ?array $reconciliation,
     ) {
         if (SmartLink::canonicalAlias($this->alias) !== $this->alias) {
@@ -36,7 +38,11 @@ final class MonitorSnapshot
      *     reconciliation?: array{result_ids: list<int>, has_more: bool, next_page_after_result_id: ?int}
      * } $readModel
      */
-    public static function fromReadModel(string $alias, array $readModel): self
+    public static function fromReadModel(
+        string $alias,
+        array $readModel,
+        array $footer = ['footer_logo_path' => null, 'footer_text' => null],
+    ): self
     {
         $batch = $readModel['batch'];
 
@@ -51,6 +57,7 @@ final class MonitorSnapshot
             $readModel['summary'],
             array_map(self::publicProgramMetric(...), $readModel['programs']),
             array_map(self::publicEvent(...), $readModel['recent_events']),
+            self::publicFooter($footer),
             array_key_exists('reconciliation', $readModel)
                 ? self::publicReconciliation($readModel['reconciliation'])
                 : null,
@@ -66,6 +73,7 @@ final class MonitorSnapshot
             'summary' => $this->summary,
             'programs' => $this->programs,
             'recent_activity' => $this->recentActivity,
+            'footer' => $this->footer,
         ];
 
         if ($this->reconciliation !== null) {
@@ -93,6 +101,7 @@ final class MonitorSnapshot
             'name' => self::string($program, 'name'),
             'personality_title' => self::nullableString($program, 'personality_title'),
             'mascot_path' => self::nullableString($program, 'mascot_path'),
+            'monitor_image_path' => self::nullableString($program, 'monitor_image_path'),
             'primary_color' => self::nullableString($program, 'primary_color'),
             'accent_color' => self::nullableString($program, 'accent_color'),
             'tagline' => self::nullableString($program, 'tagline'),
@@ -100,6 +109,20 @@ final class MonitorSnapshot
             'superpower' => self::nullableString($program, 'superpower'),
             'skills' => self::nullableString($program, 'skills'),
             'careers' => self::nullableString($program, 'careers'),
+        ];
+    }
+
+    /** @param array<string, mixed> $footer @return array{footer_logo_path: ?string, footer_text: ?string} */
+    private static function publicFooter(array $footer): array
+    {
+        $logoPath = self::nullableString($footer, 'footer_logo_path');
+        if ($logoPath !== null && !ProgramMediaStorage::isCanonicalPublicPath($logoPath)) {
+            throw new RuntimeException('Invalid monitor footer logo.');
+        }
+
+        return [
+            'footer_logo_path' => $logoPath,
+            'footer_text' => self::nullableString($footer, 'footer_text'),
         ];
     }
 

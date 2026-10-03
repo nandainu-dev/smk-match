@@ -51,11 +51,11 @@ function publicMonitorFixture(PDO $connection): array
         $statement = $connection->prepare(
             'INSERT INTO quiz_version_program_presentations (
                 quiz_version_program_id,program_code_snapshot,program_name_snapshot,
-                personality_title_snapshot,mascot_path_snapshot,primary_color_snapshot,
+                personality_title_snapshot,mascot_path_snapshot,monitor_image_path_snapshot,primary_color_snapshot,
                 accent_color_snapshot,tagline_snapshot,description_snapshot,superpower_snapshot,
                 skills_snapshot,careers_snapshot,snapshot_provenance,created_at,updated_at
             ) VALUES (
-                :membership,:code,:name,:title,:mascot,:primary,:accent,:tagline,:description,:superpower,
+                :membership,:code,:name,:title,:mascot,:monitor,:primary,:accent,:tagline,:description,:superpower,
                 :skills,:careers,:provenance,UTC_TIMESTAMP(),UTC_TIMESTAMP()
             )'
         );
@@ -65,6 +65,7 @@ function publicMonitorFixture(PDO $connection): array
             'name' => $code . ' Snapshot',
             'title' => $code . ' title',
             'mascot' => '/snapshot/' . strtolower($code) . '.png',
+            'monitor' => '/uploads/programs/' . strtolower($code) . '-monitor.png',
             'primary' => '#123456',
             'accent' => '#abcdef',
             'tagline' => $code . ' tagline',
@@ -165,6 +166,7 @@ try {
     $links = new SmartLinkRepository($database);
     $links->create($fixture['school_id'], $fixture['campaign_id'], 'Monitor', 'monitor-http', null, true);
     $links->create($fixture['school_id'], $fixture['campaign_id'], 'Inactive', 'monitor-inactive', null, false);
+    $connection->exec("INSERT INTO monitor_settings (school_id, campaign_id, rotation_seconds, polling_seconds, is_active, footer_logo_path, footer_text, updated_at) VALUES ({$fixture['school_id']}, NULL, 5, 10, 0, '/uploads/programs/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png', 'Footer monitor publik', UTC_TIMESTAMP())");
     $connection->exec("INSERT INTO campaigns (school_id,quiz_id,quiz_version_id,name,status,created_at,updated_at) VALUES ({$fixture['school_id']},1,{$fixture['version_id']},'No Batch','active',UTC_TIMESTAMP(),UTC_TIMESTAMP())");
     $noBatchCampaign = (int) $connection->lastInsertId();
     $links->create($fixture['school_id'], $noBatchCampaign, 'No Batch', 'monitor-no-batch', null, true);
@@ -175,6 +177,9 @@ try {
     $response = $router->dispatch(new Request('GET', '/api/public/monitor/monitor-http'));
     $payload = json_decode($response->body, true, 512, JSON_THROW_ON_ERROR);
     publicMonitorAssert($response->status === 200 && $payload['ok'] === true && count($payload['monitor']['recent_activity']) === 20, 'Default monitor response is invalid.');
+    publicMonitorAssert(($payload['monitor']['programs'][0]['monitor_image_path'] ?? null) === '/uploads/programs/alpha-monitor.png', 'Monitor response must expose only the version-snapshotted monitor image role.');
+    publicMonitorAssert(($payload['monitor']['footer'] ?? null) === ['footer_logo_path' => '/uploads/programs/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.png', 'footer_text' => 'Footer monitor publik'], 'Monitor response must expose the school-scoped footer identity.');
+    publicMonitorAssert(!array_key_exists('result_image_path', $payload['monitor']['programs'][0]) && !array_key_exists('share_image_path', $payload['monitor']['programs'][0]), 'Monitor response must not cross-expose result or share media roles.');
     publicMonitorAssert(($response->headers['Content-Type'] ?? null) === 'application/json; charset=utf-8' && ($response->headers['Cache-Control'] ?? null) === 'no-store, max-age=0', 'Monitor response headers are invalid.');
     publicMonitorAssert(!publicMonitorHasForbiddenKey($payload) && !array_key_exists('after_result_id', $payload['monitor']), 'Monitor response exposes private data or a cursor.');
     publicMonitorAssert($before === publicMonitorCounts($connection), 'Monitor GET mutated persisted data.');

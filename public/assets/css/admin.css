@@ -1,0 +1,514 @@
+/* Authenticated administration shell; route logic, lifecycle, and data contracts remain server-owned. */
+.admin-body { align-items: stretch; background: #f5f2ff; display: block; min-height: 100vh; padding: 0; }
+.admin-body--auth { align-items: center; display: flex; justify-content: center; padding: 24px; }
+.admin-auth-shell { max-width: 470px; width: 100%; }
+.admin-app-shell { display: grid; grid-template-columns: 238px minmax(0, 1fr); margin: 0 auto; max-width: 1440px; min-height: 100vh; }
+.admin-body .admin-sidebar { background: #25135d; color: #fff; display: flex; flex-direction: column; gap: 30px; padding: 28px 18px; }
+.admin-body .admin-brand { color: #fff; font-family: "Fredoka One", Arial, sans-serif; font-size: 1.35rem; text-decoration: none; }
+.admin-body .admin-brand span { color: #f8d46c; }
+.admin-body .admin-nav { display: grid; gap: 7px; }
+.admin-body .admin-nav a { border-radius: 8px; color: #e9e3ff; font-weight: 700; padding: 11px 12px; text-decoration: none; }
+.admin-body .admin-nav a:hover, .admin-body .admin-nav a.is-active { background: #6544c9; color: #fff; }
+.admin-body .admin-logout { margin-top: auto; }
+.admin-body .admin-sidebar .admin-button--quiet { background: rgba(255,255,255,.13); color: #fff; width: 100%; }
+.admin-body .admin-content { min-width: 0; padding: 30px; }
+.admin-body .admin-shell { margin: 0 auto; max-width: 1080px; }
+.admin-body .admin-card { box-shadow: 0 14px 36px rgba(45,25,103,.09); }
+.admin-body .admin-option-row, .admin-body .admin-question-card { border: 1px solid #ded7f7; border-radius: 12px; display: grid; gap: 12px; margin: 16px 0; padding: 17px; }
+.admin-body .admin-weight-table { border-collapse: collapse; margin-top: 10px; width: 100%; }
+.admin-body .admin-weight-table th, .admin-body .admin-weight-table td { border-bottom: 1px solid #ece8fa; padding: 8px 4px; text-align: left; }
+.admin-body .admin-weight-table input { margin: 0; max-width: 130px; min-height: 40px; }
+.admin-body .sr-only { height: 1px; margin: -1px; overflow: hidden; padding: 0; position: absolute; width: 1px; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+.admin-body .admin-section-grid { display: grid; gap: 20px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.admin-body .admin-destructive { border-color: #e1a2ad; }
+.admin-body .admin-inline-links { align-items: center; display: flex; flex-wrap: wrap; gap: 10px; }
+.admin-body .admin-url { overflow-wrap: anywhere; }
+.admin-body .admin-program-media-card { padding: clamp(20px, 2.4vw, 30px); }
+.admin-body .admin-program-media-layout { align-items: start; display: grid; gap: clamp(20px, 3vw, 34px); grid-template-columns: minmax(220px, .72fr) minmax(0, 1fr); }
+.admin-body .admin-media-preview { align-items: center; background: #f7f3ff; border: 1px solid #ded7f7; border-radius: 16px; display: flex; justify-content: center; min-height: 220px; max-height: 420px; min-width: 0; overflow: hidden; padding: 18px; }
+.admin-body .admin-media-preview p { color: #605a77; margin: 0; text-align: center; }
+.admin-body .admin-media-preview .admin-program-mascot { display: block; height: auto; max-height: 380px; max-width: 100%; object-fit: contain; width: auto; }
+.admin-body .admin-program-media-heading { margin-bottom: 20px; }
+.admin-body .admin-program-media-heading h2 { margin: 4px 0 0; }
+.admin-body .admin-program-media-heading .admin-hint { margin-bottom: 0; }
+.admin-body .admin-program-media-remove { margin-top: 12px; }
+.admin-body .admin-program-selection { border: 1px solid #ded7f7; border-radius: 12px; display: grid; gap: 8px; margin: 14px 0 0; padding: 12px; }
+.admin-body .admin-program-selection legend { font-weight: 700; padding: 0 5px; }
+.admin-body .admin-table-wrap { overflow-x: auto; }
+.admin-body .admin-history-table { border-collapse: collapse; min-width: 760px; width: 100%; }
+.admin-body .admin-history-table th, .admin-body .admin-history-table td { border-bottom: 1px solid #ded7f7; padding: 11px 12px; text-align: left; vertical-align: top; }
+.admin-body .admin-history-table th { background: #f7f3ff; color: #25135d; font-weight: 800; white-space: nowrap; }
+.admin-body .admin-history-table td { color: #39334d; overflow-wrap: anywhere; }
+.admin-body button:focus-visible, .admin-body a:focus-visible, .admin-body input:focus-visible, .admin-body textarea:focus-visible, .admin-body select:focus-visible { outline: 3px solid #e39a26; outline-offset: 2px; }
+@media (max-width: 860px) { .admin-app-shell { grid-template-columns: 1fr; } .admin-body .admin-sidebar { align-items: center; flex-direction: row; flex-wrap: wrap; gap: 12px; padding: 16px; } .admin-body .admin-nav { display: flex; flex: 1 1 420px; flex-wrap: wrap; gap: 4px; } .admin-body .admin-nav a { padding: 8px 10px; } .admin-body .admin-logout { margin: 0; } .admin-body .admin-content { padding: 22px; } }
+@media (max-width: 700px) { .admin-body .admin-program-media-layout { grid-template-columns: 1fr; } .admin-body .admin-media-preview { max-height: 340px; } .admin-body .admin-media-preview .admin-program-mascot { max-height: 300px; } }
+@media (max-width: 620px) { .admin-body--auth { align-items: flex-start; padding: 14px; } .admin-body .admin-sidebar { align-items: stretch; display: grid; grid-template-columns: 1fr auto; } .admin-body .admin-nav { grid-column: 1 / -1; } .admin-body .admin-logout { grid-column: 2; grid-row: 1; } .admin-body .admin-page-header, .admin-body .admin-card-heading, .admin-body .admin-version-row { align-items: flex-start; flex-direction: column; } .admin-body .admin-actions { justify-content: flex-start; } .admin-body .admin-content { padding: 16px; } }
+
+/* MEDIA PROGRAM RESPONSIVE FINAL */
+
+.admin-body .admin-program-media-layout {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    grid-template-columns: minmax(260px, .82fr) minmax(0, 1.18fr);
+}
+
+.admin-body .admin-program-media-layout > * {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+/* MAIN MASCOT PREVIEW */
+
+.admin-body .admin-media-preview {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    min-height: 220px;
+    max-height: 440px;
+    box-sizing: border-box;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.admin-body .admin-media-preview .admin-program-mascot {
+    display: block;
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: 400px;
+    object-fit: contain;
+    margin: auto;
+}
+
+/* THREE PROGRAM MEDIA CARDS */
+
+.admin-body .admin-program-role-media {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    box-sizing: border-box;
+}
+
+.admin-body .admin-program-role-card {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.admin-body .admin-program-role-card .admin-program-mascot {
+    display: block;
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: 250px;
+    object-fit: contain;
+    margin: 12px auto 16px;
+}
+
+.admin-body .admin-program-role-card .admin-field {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.admin-body .admin-program-role-card input,
+.admin-body .admin-program-role-card textarea,
+.admin-body .admin-program-role-card select,
+.admin-body .admin-program-role-card input[type="file"] {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.admin-body .admin-program-role-card button {
+    max-width: 100%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+/* ALL MEDIA INPUTS */
+
+.admin-body .admin-program-media-card input,
+.admin-body .admin-program-media-card textarea,
+.admin-body .admin-program-media-card select {
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.admin-body .admin-program-media-card input[type="file"] {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+/* TABLET */
+
+@media (max-width: 1100px) {
+    .admin-body .admin-program-media-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-body .admin-program-role-media {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+/* SMALL TABLET */
+
+@media (max-width: 760px) {
+    .admin-body .admin-program-role-media {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-body .admin-program-role-card .admin-program-mascot {
+        max-height: 280px;
+    }
+}
+
+/* MOBILE */
+
+@media (max-width: 620px) {
+    .admin-body .admin-program-media-card {
+        padding: 16px;
+    }
+
+    .admin-body .admin-media-preview {
+        min-height: 180px;
+        max-height: 340px;
+        padding: 12px;
+    }
+
+    .admin-body .admin-media-preview .admin-program-mascot {
+        max-height: 310px;
+    }
+
+    .admin-body .admin-program-role-media {
+        gap: 12px;
+    }
+
+    .admin-body .admin-program-role-card {
+        padding: 14px;
+    }
+
+    .admin-body .admin-program-role-card .admin-program-mascot {
+        max-height: 240px;
+        margin-top: 8px;
+        margin-bottom: 14px;
+    }
+}
+
+/* ============================================================
+   MEDIA PROGRAM CONTAINMENT V4
+   Purpose:
+   - Prevent horizontal overflow at browser zoom 100%
+   - Keep cards/forms/images inside their parent container
+   - Preserve existing media data and HTML structure
+   - CSS ONLY
+   ============================================================ */
+
+/* ---------- GLOBAL BOX CONTAINMENT ---------- */
+
+.admin-body,
+.admin-body *,
+.admin-body *::before,
+.admin-body *::after {
+    box-sizing: border-box;
+}
+
+.admin-body .admin-app-shell,
+.admin-body .admin-content,
+.admin-body .admin-shell,
+.admin-body .admin-card {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.admin-body .admin-app-shell {
+    width: 100%;
+}
+
+.admin-body .admin-content {
+    width: 100%;
+    min-width: 0;
+}
+
+.admin-body .admin-shell {
+    width: 100%;
+    min-width: 0;
+}
+
+
+/* ---------- PROGRAM CARD ---------- */
+
+.admin-body .admin-program-media-card {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow: visible;
+}
+
+
+/* ---------- MAIN PROGRAM LAYOUT ---------- */
+
+.admin-body .admin-program-media-layout {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    display: grid;
+    grid-template-columns: minmax(220px, .72fr) minmax(0, 1fr);
+    gap: clamp(20px, 3vw, 34px);
+}
+
+.admin-body .admin-program-media-layout > * {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+
+/* ---------- PREVIEW ---------- */
+
+.admin-body .admin-media-preview {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    box-sizing: border-box;
+}
+
+.admin-body .admin-media-preview .admin-program-mascot,
+.admin-body .admin-program-mascot {
+    display: block;
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: 380px;
+    object-fit: contain;
+}
+
+
+/* ---------- FORMS ---------- */
+
+.admin-body .admin-program-media-layout form,
+.admin-body .admin-program-role-card form,
+.admin-body .admin-program-media-remove {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.admin-body .admin-field {
+    min-width: 0;
+    max-width: 100%;
+}
+
+.admin-body .admin-field input,
+.admin-body .admin-field textarea,
+.admin-body .admin-field select {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+
+/* ---------- TWO-COLUMN FORM GRID ---------- */
+
+.admin-body .admin-grid {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-body .admin-grid > * {
+    min-width: 0;
+    max-width: 100%;
+}
+
+
+/* ---------- FILE INPUT ---------- */
+
+.admin-body input[type="file"] {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+
+/* ---------- ROLE MEDIA ---------- */
+
+.admin-body .admin-program-role-media {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+
+    display: grid;
+    grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
+    gap: 20px;
+    align-items: center;
+}
+
+.admin-body .admin-program-role-media > * {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.admin-body .admin-program-role-card {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+.admin-body .admin-program-role-card .admin-program-mascot {
+    display: block;
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: 320px;
+    object-fit: contain;
+}
+
+
+/* ---------- IMAGE SAFETY ---------- */
+
+.admin-body img {
+    max-width: 100%;
+    height: auto;
+}
+
+
+/* ---------- TABLE / LONG CONTENT SAFETY ---------- */
+
+.admin-body .admin-url,
+.admin-body .admin-hint,
+.admin-body p,
+.admin-body h1,
+.admin-body h2,
+.admin-body h3,
+.admin-body label {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+}
+
+
+/* ---------- TABLET ---------- */
+
+@media (max-width: 980px) {
+
+    .admin-body .admin-program-media-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-body .admin-program-role-media {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-body .admin-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-body .admin-media-preview {
+        max-height: 380px;
+    }
+
+    .admin-body .admin-media-preview .admin-program-mascot,
+    .admin-body .admin-program-mascot {
+        max-height: 340px;
+    }
+}
+
+
+/* ---------- MOBILE ---------- */
+
+@media (max-width: 620px) {
+
+    .admin-body .admin-content {
+        padding: 16px;
+    }
+
+    .admin-body .admin-program-media-card {
+        padding: 16px;
+    }
+
+    .admin-body .admin-program-media-layout {
+        gap: 16px;
+    }
+
+    .admin-body .admin-program-role-media {
+        gap: 16px;
+    }
+
+    .admin-body .admin-media-preview {
+        min-height: 180px;
+        max-height: 320px;
+        padding: 12px;
+    }
+
+    .admin-body .admin-media-preview .admin-program-mascot,
+    .admin-body .admin-program-mascot {
+        max-height: 280px;
+    }
+}
+
+/* ============================================================
+   END MEDIA PROGRAM CONTAINMENT V4
+   ============================================================ */
+
+/* MEDIA PROGRAM OVERFLOW FIX V7 */
+
+/* Allow the Media Program hierarchy to shrink inside the actual viewport. */
+.admin-body .admin-program-media-card,
+.admin-body .admin-program-media-layout,
+.admin-body .admin-program-media-layout > *,
+.admin-body .admin-program-role-media,
+.admin-body .admin-program-role-media > *,
+.admin-body .admin-grid,
+.admin-body .admin-grid-wide,
+.admin-body .admin-program-role-card,
+.admin-body .admin-program-role-card form {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+/* Never let the media layout itself grow from intrinsic child width. */
+.admin-body .admin-program-media-layout {
+    width: 100%;
+    max-width: 100%;
+}
+
+/* The role section must follow the available second grid track. */
+.admin-body .admin-program-role-media {
+    width: 100%;
+    max-width: 100%;
+}
+
+/* Allow the three-program grid to compress its columns. */
+.admin-body .admin-grid {
+    width: 100%;
+    max-width: 100%;
+}
+
+/* Role cards must fit their grid tracks instead of defining the grid width. */
+.admin-body .admin-program-role-card {
+    width: 100%;
+    max-width: 100%;
+}

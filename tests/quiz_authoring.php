@@ -4,6 +4,7 @@ declare(strict_types=1);
 require dirname(__DIR__) . '/app/bootstrap.php';
 
 use App\Core\AttemptRepository;
+use App\Controllers\AdminQuizController;
 use App\Core\CampaignBatchRepository;
 use App\Core\CampaignRepository;
 use App\Core\Config;
@@ -59,6 +60,48 @@ function authoringPrograms(): array
         'GAMMA' => true,
         'DELTA' => true,
     ];
+}
+
+/** @return array<string, bool> */
+function simpleAuthoringPrograms(): array
+{
+    return [
+        'ALPHA' => true,
+        'BETA' => true,
+        'GAMMA' => true,
+    ];
+}
+
+/**
+ * @param array<string, bool> $programs
+ * @param list<list<string>> $questionMappings
+ */
+function simpleMappingDefinition(string $name, array $programs, array $questionMappings): QuizDefinition
+{
+    $questions = [];
+    foreach ($questionMappings as $questionIndex => $mapping) {
+        authoringAssert(count($mapping) === 4, 'Simple authoring fixture requires exactly A-D mappings.');
+        $options = [];
+        foreach ($mapping as $optionIndex => $program) {
+            $letter = chr(65 + $optionIndex);
+            $options[] = [
+                'id' => 'simple-' . $questionIndex . '-' . strtolower($letter),
+                'text' => 'Pilihan ' . $letter,
+                'order' => ($optionIndex + 1) * 10,
+                'weights' => [['program' => $program, 'weight' => 1.0]],
+            ];
+        }
+        $questions[] = [
+            'id' => 'simple-' . $questionIndex,
+            'text' => 'Pertanyaan ' . ($questionIndex + 1),
+            'help_text' => null,
+            'image_path' => null,
+            'order' => ($questionIndex + 1) * 10,
+            'options' => $options,
+        ];
+    }
+
+    return new QuizDefinition($name, 1, $programs, $questions);
 }
 
 function authoringDefinition(string $name, string $prefix, ?string $imagePath = null): QuizDefinition
@@ -121,6 +164,40 @@ function authoringDefinition(string $name, string $prefix, ?string $imagePath = 
             ],
         ],
     );
+}
+
+/** @param array<string, bool> $programs */
+function controllerInitialDefinition(string $quizName, array $programs): QuizDefinition
+{
+    $reflection = new ReflectionClass(AdminQuizController::class);
+    $controller = $reflection->newInstanceWithoutConstructor();
+    $method = new ReflectionMethod(AdminQuizController::class, 'initialDefinition');
+    $method->setAccessible(true);
+    $definition = $method->invoke($controller, $quizName, $programs);
+
+    authoringAssert($definition instanceof QuizDefinition, 'Initial admin definition was not created.');
+
+    return $definition;
+}
+
+/** @param array<string, bool> $programs @return list<array{program: string, weight: float}> */
+function controllerDynamicDefaultWeights(array $programs, string $program): array
+{
+    $reflection = new ReflectionClass(AdminQuizController::class);
+    $controller = $reflection->newInstanceWithoutConstructor();
+    $weightInput = new ReflectionMethod(AdminQuizController::class, 'weightInput');
+    $weightInput->setAccessible(true);
+    $weights = new ReflectionMethod(AdminQuizController::class, 'weights');
+    $weights->setAccessible(true);
+    authoringAssert(array_key_exists($program, $programs), 'Authoring fixture has no selected program.');
+
+    $input = $weightInput->invoke($controller, [
+        'primary_program' => $program,
+    ], $programs);
+    $assignments = $weights->invoke($controller, $input, $programs);
+    authoringAssert(is_array($assignments), 'Dynamic authoring weight conversion did not return assignments.');
+
+    return $assignments;
 }
 
 function authoringQuiz(PDO $connection, int $schoolId, string $name): int
@@ -273,6 +350,55 @@ try {
     $repository = new QuizVersionRepository($database);
     $versions = new QuizVersionService($repository);
     $authoring = new QuizAuthoringService($repository);
+    $defaultQuizId = authoringQuiz($connection, $schoolA, 'Initial Draft Quiz');
+    $simplePrograms = simpleAuthoringPrograms();
+    $defaultDefinition = controllerInitialDefinition('Initial Draft Quiz', $simplePrograms);
+    $defaultDraft = $repository->createDraftSnapshot($defaultQuizId, $defaultDefinition);
+    $reloadedDefaultDraft = $repository->findById($defaultDraft->id);
+    authoringAssert(
+        $reloadedDefaultDraft !== null
+            && count($reloadedDefaultDraft->definition()->questions) === 5,
+        'Initial authoring definition did not create five questions.',
+    );
+    $defaultProgramsByOption = ['ALPHA', 'BETA', 'GAMMA', 'ALPHA'];
+    foreach ($reloadedDefaultDraft->definition()->questions as $question) {
+        authoringAssert(
+            array_column($question['options'], 'text') === ['Pilihan A', 'Pilihan B', 'Pilihan C', 'Pilihan D']
+                && count($question['options']) === 4,
+            'Initial authoring definition did not retain the canonical A-D option set.',
+        );
+        foreach ($question['options'] as $optionIndex => $option) {
+            $expectedProgram = $defaultProgramsByOption[$optionIndex];
+            authoringAssert(
+                $option['weights'] === [['program' => $expectedProgram, 'weight' => 1.0]]
+                    && $option['weights'] === controllerDynamicDefaultWeights($simplePrograms, $expectedProgram),
+                'Server-created default options do not match the independent one-program automatic-weight mapping.',
+            );
+        }
+    }
+    $mixedMappings = [
+        ['ALPHA', 'BETA', 'GAMMA', 'ALPHA'],
+        ['GAMMA', 'ALPHA', 'BETA', 'GAMMA'],
+    ];
+    $mixedDefinition = simpleMappingDefinition('Initial Draft Quiz', $simplePrograms, $mixedMappings);
+    $mixedDraft = $authoring->replaceDraftDefinition($schoolA, $defaultQuizId, $defaultDraft->id, $mixedDefinition);
+    $reloadedMixedDraft = $repository->findById($mixedDraft->id);
+    authoringAssert($reloadedMixedDraft !== null, 'Mixed program mapping draft could not be reloaded.');
+    foreach ($reloadedMixedDraft->definition()->questions as $questionIndex => $question) {
+        $actualPrograms = array_map(
+            static fn (array $option): string => $option['weights'][0]['program'],
+            $question['options'],
+        );
+        $actualWeights = array_map(
+            static fn (array $option): float => $option['weights'][0]['weight'],
+            $question['options'],
+        );
+        authoringAssert(
+            $actualPrograms === $mixedMappings[$questionIndex]
+                && $actualWeights === [1.0, 1.0, 1.0, 1.0],
+            'Independent A-D program mappings were not saved and reloaded exactly with automatic weight one.',
+        );
+    }
     $sourceQuizId = authoringQuiz($connection, $schoolA, 'Source Quiz');
     $initial = authoringDefinition('Source Draft', 'initial', $storedPng);
     $draft = $repository->createDraftSnapshot($sourceQuizId, $initial);
@@ -296,6 +422,14 @@ try {
             && $connection->query('SELECT COUNT(*) FROM question_options AS qo INNER JOIN questions AS q ON q.id = qo.question_id WHERE q.quiz_version_id = ' . $edited->id)->fetchColumn() === 4
             && $connection->query('SELECT COUNT(*) FROM option_weights AS ow INNER JOIN question_options AS qo ON qo.id = ow.question_option_id INNER JOIN questions AS q ON q.id = qo.question_id WHERE q.quiz_version_id = ' . $edited->id)->fetchColumn() === 7,
         'Question, option, or N-program weight persistence is incomplete.',
+    );
+
+    $sameNameDefinition = authoringDefinition('Source Draft Revised', 'same-name', $storedJpeg);
+    $sameNameEdited = $authoring->replaceDraftDefinition($schoolA, $sourceQuizId, $edited->id, $sameNameDefinition);
+    authoringAssert(
+        $sameNameEdited->name === 'Source Draft Revised'
+            && $sameNameEdited->definition()->questions[0]['text'] === 'Earlier question same-name',
+        'A draft save with an unchanged name was treated as a lifecycle conflict.',
     );
 
     $beforeRollback = $repository->findById($edited->id);
@@ -325,6 +459,15 @@ try {
             && $clone->definition()->questions[1]['image_path'] === $storedJpeg
             && $repository->findById($published->id)?->definition()->questions[1]['image_path'] === $storedJpeg,
         'Clone did not retain the immutable image reference or changed the source version.',
+    );
+
+    $versions->discard($sourceQuizId, $clone->id);
+    $freshPresentationClone = $versions->cloneVersionToDraftWithCurrentPresentations($sourceQuizId, $published->id);
+    authoringAssert(
+        $freshPresentationClone->isDraft()
+            && $freshPresentationClone->definition()->questions[1]['image_path'] === $storedJpeg
+            && $repository->findById($published->id)?->definition()->questions[1]['image_path'] === $storedJpeg,
+        'Fresh presentation clone did not preserve the source question structure.',
     );
 
     $discardQuizId = authoringQuiz($connection, $schoolA, 'Discard Quiz');

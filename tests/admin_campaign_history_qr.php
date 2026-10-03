@@ -61,10 +61,10 @@ function adminCampaignResetSession(): void
     $_SESSION = [];
 }
 
-/** @param array<string, mixed> $query @param array<string, mixed> $form */
-function adminCampaignRequest(string $method, string $path, array $query = [], array $form = []): Request
+/** @param array<string, string> $headers @param array<string, mixed> $query @param array<string, mixed> $form */
+function adminCampaignRequest(string $method, string $path, array $query = [], array $form = [], array $headers = []): Request
 {
-    return new Request($method, $path, [], '', [], false, $query, $form);
+    return new Request($method, $path, $headers, '', [], false, $query, $form);
 }
 
 function adminCampaignDefinition(): QuizDefinition
@@ -137,6 +137,9 @@ try {
     $versionService = new QuizVersionService($versions);
     $versionA = $versionService->getOrCreateDraft($quizA, adminCampaignDefinition());
     $versionService->publish($quizA, $versionA->id);
+    $versionA2 = $versionService->getOrCreateDraft($quizA, adminCampaignDefinition());
+    $versionService->publish($quizA, $versionA2->id);
+    $draftVersionA = $versionService->getOrCreateDraft($quizA, adminCampaignDefinition());
     $versionB = $versionService->getOrCreateDraft($quizB, adminCampaignDefinition());
     $versionService->publish($quizB, $versionB->id);
 
@@ -151,6 +154,7 @@ try {
     $batchB = $campaignService->activateCampaign($campaignB, new DateTimeImmutable('2026-01-01 00:00:00 UTC'));
     $smartLinks = new SmartLinkService(new SmartLinkRepository($database), new CampaignRepository($database), new CampaignBatchRepository($database));
     $link = $smartLinks->create($schoolA, $campaignA, 'Campaign A QR', 'campaign-a');
+    $smartLinks->create($schoolB, $campaignB, 'Campaign B QR', 'campaign-b');
 
     $connection->exec("INSERT INTO participants (school_id, public_uuid, full_name, origin_school, class_name, phone, marketing_consent, created_at, updated_at) VALUES ({$schoolA}, '34343434-3434-4343-8343-343434343434', 'Privacy Participant', 'Private Origin', 'XII', '08123456789', 1, UTC_TIMESTAMP(), UTC_TIMESTAMP())");
     $participantA = (int) $connection->lastInsertId();
@@ -199,7 +203,45 @@ try {
 
     $dashboard = $controller->index(adminCampaignRequest('GET', '/admin/campaigns', ['campaign_id' => (string) $campaignA, 'school_id' => (string) $schoolB]));
     adminCampaignAssert($dashboard->status === 200 && str_contains($dashboard->body, 'Campaign A') && !str_contains($dashboard->body, 'Campaign B'), 'Campaign dashboard did not enforce school scope.');
-    adminCampaignAssert(str_contains($dashboard->body, 'http://127.0.0.1:8080/go/campaign-a'), 'Canonical Smart QR target is missing.');
+    adminCampaignAssert(str_contains($dashboard->body, 'QR belum dibuat') && !str_contains($dashboard->body, 'data-admin-qr-target='), 'Un-generated Smart QR target was not kept empty.');
+    adminCampaignAssert(str_contains($dashboard->body, 'Versi 1') && str_contains($dashboard->body, 'Versi 2') && str_contains($dashboard->body, 'Sedang aktif') && !str_contains($dashboard->body, 'Versi 3'), 'Campaign version selector did not expose only published versions and the current version.');
+    adminCampaignAssert($controller->activateQuizVersion(adminCampaignRequest('POST', '/admin/campaigns/' . $campaignA . '/quiz-versions/' . $versionA2->id . '/activate'), (string) $campaignA, (string) $versionA2->id)->status === 403, 'Version activation without CSRF was accepted.');
+    adminCampaignAssert($controller->activateQuizVersion(adminCampaignRequest('POST', '/admin/campaigns/' . $campaignA . '/quiz-versions/' . $versionA2->id . '/activate', [], ['csrf_token' => $csrf, 'confirmation' => 'NO']), (string) $campaignA, (string) $versionA2->id)->status === 422, 'Version activation without explicit confirmation was accepted.');
+    adminCampaignAssert($controller->activateQuizVersion(adminCampaignRequest('POST', '/admin/campaigns/' . $campaignA . '/quiz-versions/' . $draftVersionA->id . '/activate', [], ['csrf_token' => $csrf, 'confirmation' => 'AKTIFKAN']), (string) $campaignA, (string) $draftVersionA->id)->status === 404, 'Draft version activation was accepted.');
+    adminCampaignAssert($controller->activateQuizVersion(adminCampaignRequest('POST', '/admin/campaigns/' . $campaignB . '/quiz-versions/' . $versionB->id . '/activate', [], ['csrf_token' => $csrf, 'confirmation' => 'AKTIFKAN']), (string) $campaignB, (string) $versionB->id)->status === 404, 'Cross-school version activation was accepted.');
+    $lanSuggestion = $controller->index(adminCampaignRequest('GET', '/admin/campaigns', ['campaign_id' => (string) $campaignA], [], ['Host' => '10.104.37.122:8081']));
+    adminCampaignAssert(str_contains($lanSuggestion->body, 'value="http://10.104.37.122:8081"'), 'Private LAN host was not offered as an editable QR base URL suggestion.');
+    adminCampaignAssert(str_contains($dashboard->body, 'http://127.0.0.1:8080/monitor/campaign-a') && str_contains($dashboard->body, 'Buka Monitor'), 'Campaign dashboard does not expose the matching read-only Monitor URL.');
+    $routes = require SMK_MATCH_ROOT . '/routes/web.php';
+    $router = $routes($config);
+    $monitorBeforeGeneration = $router->dispatch(new Request('GET', '/monitor/campaign-a'));
+    adminCampaignAssert($monitorBeforeGeneration->status === 200 && str_contains($monitorBeforeGeneration->body, 'data-monitor-qr-target=""') && str_contains($monitorBeforeGeneration->body, 'QR belum dibuat oleh admin.'), 'Monitor silently generated a QR target.');
+    adminCampaignAssert($controller->generateQr(adminCampaignRequest('POST', '/admin/campaigns/' . $campaignA . '/smart-links/campaign-a/qr', [], ['base_url' => 'http://10.104.37.122:8081']), (string) $campaignA, 'campaign-a')->status === 403, 'QR generation without CSRF was accepted.');
+    adminCampaignAssert($controller->generateQr(adminCampaignRequest('POST', '/admin/campaigns/' . $campaignB . '/smart-links/campaign-b/qr', [], ['csrf_token' => $csrf, 'base_url' => 'http://10.104.37.122:8081']), (string) $campaignB, 'campaign-b')->status === 404, 'Cross-school QR generation was accepted.');
+    adminCampaignAssert($controller->generateQr(adminCampaignRequest('POST', '/admin/campaigns/' . $campaignA . '/smart-links/campaign-a/qr', [], ['csrf_token' => $csrf, 'base_url' => 'https://example.test/admin']), (string) $campaignA, 'campaign-a')->status === 422, 'QR generation accepted a non-origin base URL.');
+
+    $baseA = 'http://10.104.37.122:8081';
+    $targetA = $baseA . '/go/campaign-a';
+    adminCampaignAssert($controller->generateQr(adminCampaignRequest('POST', '/admin/campaigns/' . $campaignA . '/smart-links/campaign-a/qr', [], ['csrf_token' => $csrf, 'base_url' => $baseA]), (string) $campaignA, 'campaign-a')->status === 302, 'Authorized QR generation failed.');
+    adminCampaignAssert($adminRepository->findSmartLinkForCampaign($schoolA, $campaignA, 'campaign-a')?->qrTargetUrl === $targetA, 'Generated QR target was not persisted.');
+    $dashboardA = $controller->index(adminCampaignRequest('GET', '/admin/campaigns', ['campaign_id' => (string) $campaignA]));
+    $monitorA = $router->dispatch(new Request('GET', '/monitor/campaign-a'));
+    adminCampaignAssert(str_contains($dashboardA->body, 'data-admin-qr-target="' . $targetA . '"') && str_contains($monitorA->body, 'data-monitor-qr-target="' . $targetA . '"'), 'Admin and Monitor did not use the same persisted QR target.');
+
+    putenv('SMK_MATCH_BASE_URL=http://192.168.1.50:8081');
+    $changedConfig = Config::load(SMK_MATCH_ROOT);
+    $changedDashboard = (new AdminCampaignService($changedConfig, $adminRepository, $historyRepository, $campaignService))->campaignDashboard($schoolA, $campaignA);
+    $changedRouter = $routes($changedConfig);
+    $changedMonitor = $changedRouter->dispatch(new Request('GET', '/monitor/campaign-a'));
+    putenv('SMK_MATCH_BASE_URL');
+    adminCampaignAssert($changedDashboard['smart_links'][0]['qr_target_url'] === $targetA && str_contains($changedMonitor->body, 'data-monitor-qr-target="' . $targetA . '"'), 'Base URL change silently rewrote the persisted QR target.');
+
+    $baseB = 'http://192.168.1.50:8081';
+    $targetB = $baseB . '/go/campaign-a';
+    adminCampaignAssert($controller->generateQr(adminCampaignRequest('POST', '/admin/campaigns/' . $campaignA . '/smart-links/campaign-a/qr', [], ['csrf_token' => $csrf, 'base_url' => $baseB]), (string) $campaignA, 'campaign-a')->status === 302, 'QR regeneration failed.');
+    $dashboardB = $controller->index(adminCampaignRequest('GET', '/admin/campaigns', ['campaign_id' => (string) $campaignA]));
+    $monitorB = $router->dispatch(new Request('GET', '/monitor/campaign-a'));
+    adminCampaignAssert($targetA !== $targetB && str_contains($dashboardB->body, 'data-admin-qr-target="' . $targetB . '"') && str_contains($monitorB->body, 'data-monitor-qr-target="' . $targetB . '"'), 'QR regeneration did not update Admin and Monitor together.');
     adminCampaignAssert($controller->index(adminCampaignRequest('GET', '/admin/campaigns', ['campaign_id' => (string) $campaignB]))->status === 404, 'Cross-school campaign was accepted.');
     adminCampaignAssert($controller->reset(adminCampaignRequest('POST', '/admin/campaigns/' . $campaignA . '/batches/reset'), (string) $campaignA)->status === 403, 'Reset without CSRF was accepted.');
     adminCampaignAssert($controller->reset(adminCampaignRequest('POST', '/admin/campaigns/' . $campaignA . '/batches/reset', [], ['csrf_token' => $csrf, 'confirmation' => 'NO']), (string) $campaignA)->status === 422, 'Reset without explicit confirmation was accepted.');
@@ -223,8 +265,9 @@ try {
     adminCampaignAssert($report['rows'][0]['outcome']['kind'] === 'tie' && count($report['rows'][0]['outcome']['tied_programs']) === 2, 'Historical report did not retain tie state.');
     adminCampaignAssert($report['rows'][0]['ranking'][0]['program']['name'] === 'Alpha Snapshot', 'Historical report used mutable program data.');
     adminCampaignAssert($report['summary'][0]['code'] === 'ALPHA' && $report['summary'][0]['name'] === 'Alpha Snapshot', 'Program summary did not use version snapshots.');
+    adminCampaignAssert($report['rows'][0]['origin_school'] === 'Private Origin' && $report['rows'][0]['class_name'] === 'XII' && $report['rows'][0]['phone'] === '08123456789', 'Authorized historical report does not provide the participant table fields.');
     $serializedReport = json_encode($report, JSON_THROW_ON_ERROR);
-    foreach (['08123456789', 'Private Origin', 'marketing_consent', 'visitor_uuid', 'attempt_uuid', 'responses'] as $forbidden) {
+    foreach (['marketing_consent', 'visitor_uuid', 'attempt_uuid', 'responses'] as $forbidden) {
         adminCampaignAssert(!str_contains($serializedReport, $forbidden), 'Historical report leaked private data: ' . $forbidden);
     }
     adminCampaignAssert($adminService->history($schoolA, null, null, null, null)['rows'] !== [], 'All-history mode did not include owned attempts.');
@@ -233,6 +276,25 @@ try {
     adminCampaignAssert($controller->history(adminCampaignRequest('GET', '/admin/history', ['campaign_id' => (string) $campaignA, 'batch_id' => (string) $batchB->id]))->status === 404, 'Cross-campaign batch selection was accepted.');
     adminCampaignAssert($controller->history(adminCampaignRequest('GET', '/admin/history', ['from' => '2026-02-30']))->status === 422, 'Malformed date was accepted.');
     adminCampaignAssert($controller->history(adminCampaignRequest('GET', '/admin/history', ['from' => '2026-01-03', 'to' => '2026-01-02']))->status === 422, 'Reversed date range was accepted.');
+    $historyPage = $controller->history(adminCampaignRequest('GET', '/admin/history', ['campaign_id' => (string) $campaignA, 'batch_id' => (string) $batchA->id]));
+    adminCampaignAssert($historyPage->status === 200 && str_contains($historyPage->body, 'formaction="/admin/history/export"') && str_contains($historyPage->body, '<table class="admin-history-table">') && str_contains($historyPage->body, '<th scope="col">Nomor Telepon</th>') && str_contains($historyPage->body, 'Alpha Snapshot, Gamma Snapshot') && !str_contains($historyPage->body, '#1 '), 'Authorized history page does not use the approved table and snapshot program names.');
+
+    $activateVersion = $controller->activateQuizVersion(
+        adminCampaignRequest('POST', '/admin/campaigns/' . $campaignA . '/quiz-versions/' . $versionA2->id . '/activate', [], ['csrf_token' => $csrf, 'confirmation' => 'AKTIFKAN']),
+        (string) $campaignA,
+        (string) $versionA2->id,
+    );
+    $activatedBatches = $adminRepository->listBatchesForCampaign($schoolA, $campaignA);
+    adminCampaignAssert(
+        $activateVersion->status === 302
+            && $adminRepository->findCampaignForSchool($schoolA, $campaignA)?->quizVersionId === $versionA2->id
+            && count($activatedBatches) === 3
+            && $activatedBatches[1]->status === 'closed'
+            && $activatedBatches[1]->quizVersionId === $versionA->id
+            && $activatedBatches[2]->status === 'active'
+            && $activatedBatches[2]->quizVersionId === $versionA2->id,
+        'Authorized published version activation did not preserve historical batches and select the new active version.',
+    );
 
     $script = (string) file_get_contents(SMK_MATCH_ROOT . '/public/assets/js/admin-smart-qr.js');
     adminCampaignAssert(str_contains($script, 'SmkMatchQrSvg.render') && str_contains($script, 'new Blob') && str_contains($script, 'image/svg+xml'), 'Local SVG QR contract is missing.');

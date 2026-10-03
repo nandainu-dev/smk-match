@@ -9,6 +9,7 @@
         const target = card.dataset.adminQrTarget;
         const preview = card.querySelector("[data-admin-qr-preview]");
         const download = card.querySelector("[data-admin-qr-download]");
+        const copy = card.querySelector("[data-admin-copy-link]");
         if (typeof target !== "string" || target === "" || !(preview instanceof HTMLElement)) {
             return;
         }
@@ -38,5 +39,16 @@
             link.click();
             URL.revokeObjectURL(url);
         });
+
+        if (copy instanceof HTMLButtonElement && navigator.clipboard) {
+            copy.addEventListener("click", async () => {
+                try {
+                    await navigator.clipboard.writeText(target);
+                    copy.textContent = "Link disalin";
+                } catch (_error) {
+                    copy.textContent = "Salin Link";
+                }
+            });
+        }
     });
 })();

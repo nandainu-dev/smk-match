@@ -19,6 +19,9 @@ final class QuizVersionProgramPresentation
         public readonly ?string $skillsSnapshot,
         public readonly ?string $careersSnapshot,
         public readonly string $snapshotProvenance,
+        public readonly ?string $resultImagePathSnapshot = null,
+        public readonly ?string $shareImagePathSnapshot = null,
+        public readonly ?string $monitorImagePathSnapshot = null,
     ) {
         $this->validate();
     }
@@ -39,6 +42,11 @@ final class QuizVersionProgramPresentation
 
         if ($this->mascotPathSnapshot !== null && !$this->isSafeMascotPath($this->mascotPathSnapshot)) {
             throw new \InvalidArgumentException('Mascot path snapshot must be a safe local asset path.');
+        }
+        foreach ([$this->resultImagePathSnapshot, $this->shareImagePathSnapshot, $this->monitorImagePathSnapshot] as $path) {
+            if ($path !== null && !ProgramMediaStorage::isCanonicalPublicPath($path)) {
+                throw new \InvalidArgumentException('Program media role snapshot must be a safe local upload path.');
+            }
         }
 
         foreach ([$this->primaryColorSnapshot, $this->accentColorSnapshot] as $color) {

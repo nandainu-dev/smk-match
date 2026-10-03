@@ -17,7 +17,7 @@ final class SmartLinkRepository
         $this->assertPositiveId($smartLinkId, 'Smart link identity');
 
         $statement = $this->connection()->prepare(
-            'SELECT id, school_id, campaign_id, name, alias, source, is_active, scan_count, created_at, updated_at
+            'SELECT id, school_id, campaign_id, name, alias, source, qr_target_url, is_active, scan_count, created_at, updated_at
              FROM smart_links
              WHERE id = :id'
         );
@@ -32,7 +32,7 @@ final class SmartLinkRepository
         $canonicalAlias = SmartLink::canonicalAlias($alias);
 
         $statement = $this->connection()->prepare(
-            'SELECT id, school_id, campaign_id, name, alias, source, is_active, scan_count, created_at, updated_at
+            'SELECT id, school_id, campaign_id, name, alias, source, qr_target_url, is_active, scan_count, created_at, updated_at
              FROM smart_links
              WHERE alias = :alias'
         );
@@ -123,6 +123,7 @@ final class SmartLinkRepository
             $this->rowString($row, 'name'),
             $this->rowString($row, 'alias'),
             $this->rowNullableString($row, 'source'),
+            $this->rowNullableString($row, 'qr_target_url'),
             $this->rowBool($row, 'is_active'),
             $this->rowInt($row, 'scan_count'),
             $this->rowString($row, 'created_at'),

@@ -107,4 +107,5 @@ ob_start();
 </main>
 <?php
 $content = (string) ob_get_clean();
+$adminActiveNav = 'quiz';
 require SMK_MATCH_ROOT . '/resources/views/layouts/admin.php';

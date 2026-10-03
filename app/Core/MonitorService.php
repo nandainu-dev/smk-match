@@ -10,6 +10,8 @@ final class MonitorService
     public function __construct(
         private readonly SmartLinkService $smartLinks,
         private readonly MonitorReadRepository $monitorReads,
+        private readonly ?SmartLinkRepository $smartLinkRepository = null,
+        private readonly ?MonitorIdentityRepository $monitorIdentity = null,
     ) {
     }
 
@@ -34,6 +36,16 @@ final class MonitorService
             throw new RuntimeException('Monitor batch does not belong to the resolved campaign.');
         }
 
-        return MonitorSnapshot::fromReadModel($resolution->alias, $readModel);
+        $footer = ['footer_logo_path' => null, 'footer_text' => null];
+        if ($this->smartLinkRepository !== null && $this->monitorIdentity !== null) {
+            $smartLink = $this->smartLinkRepository->findByAlias($resolution->alias);
+            if ($smartLink === null) {
+                throw new RuntimeException('Smart alias was not found.');
+            }
+
+            $footer = $this->monitorIdentity->forSchool($smartLink->schoolId);
+        }
+
+        return MonitorSnapshot::fromReadModel($resolution->alias, $readModel, $footer);
     }
 }
